@@ -45,17 +45,15 @@ public class Vxi11Client {
         } catch (OncRpcException e) {
             throw new Vxi11Exception(e);
         }
-        if (response.getError() != ErrorCode.NO_ERROR) {
-            throw new Vxi11Exception(response.getError());
-        }
+        response.getError().checkErrorThrowException();
         if (!connectedAbortChannel()) {
             try {
                 this.abortChannel = OncRpcClient.newOncRpcClient(host, DeviceCore.PROGRAM, DeviceCore.VERSION, response.getAbortPort(), OncRpcProtocols.ONCRPC_TCP);
             } catch (OncRpcException | IOException e) {
-                log.warn("");
+                log.warn("Link {} failed to establish the termination channel, the instrument may not support it.", response.getLink().getLinkId());
             }
         }
-        return new DeviceLinkClient(this, response.getLinkId());
+        return new DeviceLinkClient(this, response.getLink().getLinkId());
     }
 
     public boolean connectedAbortChannel() {

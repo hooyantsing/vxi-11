@@ -5,14 +5,14 @@ import java.io.IOException;
 
 public class DeviceWriteParams implements XdrAble {
 
-    private DeviceLink lid;
+    private DeviceLink link;
     private int ioTimeout;
     private int lockTimeout;
     private DeviceFlags flags;
     private byte [] data;
 
-    public DeviceWriteParams(DeviceLink lid, int ioTimeout, int lockTimeout, DeviceFlags flags, byte[] data) {
-        this.lid = lid;
+    public DeviceWriteParams(DeviceLink link, int ioTimeout, int lockTimeout, DeviceFlags flags, byte[] data) {
+        this.link = link;
         this.ioTimeout = ioTimeout;
         this.lockTimeout = lockTimeout;
         this.flags = flags;
@@ -21,7 +21,7 @@ public class DeviceWriteParams implements XdrAble {
 
     @Override
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        lid.xdrEncode(xdr);
+        link.xdrEncode(xdr);
         xdr.xdrEncodeInt(ioTimeout);
         xdr.xdrEncodeInt(lockTimeout);
         flags.xdrEncode(xdr);
@@ -30,7 +30,7 @@ public class DeviceWriteParams implements XdrAble {
 
     @Override
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        lid = new DeviceLink(xdr);
+        link = new DeviceLink(xdr);
         ioTimeout = xdr.xdrDecodeInt();
         lockTimeout = xdr.xdrDecodeInt();
         flags = new DeviceFlags(xdr);

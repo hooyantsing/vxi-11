@@ -11,13 +11,13 @@ public class CreateLinkParams implements XdrAble {
 
     private int clientId;
     private boolean lockDevice;
-    private int lock_timeout;
+    private int lockTimeout;
     private String device;
 
-    public CreateLinkParams(int clientId, boolean lockDevice, int lock_timeout, String device) {
+    public CreateLinkParams(int clientId, boolean lockDevice, int lockTimeout, String device) {
         this.clientId = clientId;
         this.lockDevice = lockDevice;
-        this.lock_timeout = lock_timeout;
+        this.lockTimeout = lockTimeout;
         this.device = device;
     }
 
@@ -25,7 +25,7 @@ public class CreateLinkParams implements XdrAble {
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
         xdr.xdrEncodeInt(clientId);
         xdr.xdrEncodeBoolean(lockDevice);
-        xdr.xdrEncodeInt(lock_timeout);
+        xdr.xdrEncodeInt(lockTimeout);
         xdr.xdrEncodeString(device);
     }
 
@@ -33,7 +33,7 @@ public class CreateLinkParams implements XdrAble {
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
         clientId = xdr.xdrDecodeInt();
         lockDevice = xdr.xdrDecodeBoolean();
-        lock_timeout = xdr.xdrDecodeInt();
+        lockTimeout = xdr.xdrDecodeInt();
         device = xdr.xdrDecodeString();
     }
 
@@ -45,8 +45,8 @@ public class CreateLinkParams implements XdrAble {
         return lockDevice;
     }
 
-    public int getLock_timeout() {
-        return lock_timeout;
+    public int getLockTimeout() {
+        return lockTimeout;
     }
 
     public String getDevice() {

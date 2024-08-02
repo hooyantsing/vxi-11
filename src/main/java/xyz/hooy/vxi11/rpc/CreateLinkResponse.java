@@ -10,32 +10,32 @@ import java.io.IOException;
 public class CreateLinkResponse implements XdrAble {
 
     private DeviceErrorCode error;
-    private DeviceLink lid;
+    private DeviceLink link;
     private short abortPort;
-    private int maxRecvSize;
+    private int maxReceiveSize;
 
     @Override
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
         error.xdrEncode(xdr);
-        lid.xdrEncode(xdr);
+        link.xdrEncode(xdr);
         xdr.xdrEncodeShort(abortPort);
-        xdr.xdrEncodeInt(maxRecvSize);
+        xdr.xdrEncodeInt(maxReceiveSize);
     }
 
     @Override
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
         error = new DeviceErrorCode(xdr);
-        lid = new DeviceLink(xdr);
+        link = new DeviceLink(xdr);
         abortPort = xdr.xdrDecodeShort();
-        maxRecvSize = xdr.xdrDecodeInt();
+        maxReceiveSize = xdr.xdrDecodeInt();
     }
 
-    public int getError() {
-        return error.getValue();
+    public DeviceErrorCode getError() {
+        return error;
     }
 
-    public int getLinkId() {
-        return lid.getValue();
+    public DeviceLink getLink() {
+        return link;
     }
 
     public short getAbortPort() {
@@ -43,6 +43,6 @@ public class CreateLinkResponse implements XdrAble {
     }
 
     public int getMaxReceiveSize() {
-        return maxRecvSize;
+        return maxReceiveSize;
     }
 }

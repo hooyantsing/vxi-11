@@ -12,7 +12,7 @@ public class DeviceFlags implements XdrAble {
 
     public final static int WAIT_LOCK_OFFSET = 0;
 
-    private int value = 0;
+    private int flagBits = 0;
 
     public DeviceFlags(boolean terminationCharacter, boolean end, boolean waitLock) {
         enableTerminationCharacter(terminationCharacter);
@@ -26,24 +26,24 @@ public class DeviceFlags implements XdrAble {
 
     @Override
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        xdr.xdrEncodeInt(value);
+        xdr.xdrEncodeInt(flagBits);
     }
 
     @Override
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        value = xdr.xdrDecodeInt();
+        flagBits = xdr.xdrDecodeInt();
     }
 
     public boolean isTerminationCharacter() {
-        return value >> TERMINATION_CHARACTER_OFFSET == 1;
+        return flagBits >> TERMINATION_CHARACTER_OFFSET == 1;
     }
 
     public boolean isEnd() {
-        return value >> END_OFFSET == 1;
+        return flagBits >> END_OFFSET == 1;
     }
 
     public boolean isWaitLock() {
-        return value >> WAIT_LOCK_OFFSET == 1;
+        return flagBits >> WAIT_LOCK_OFFSET == 1;
     }
 
     public void enableTerminationCharacter(boolean enable) {
@@ -59,10 +59,6 @@ public class DeviceFlags implements XdrAble {
     }
 
     private void offsetBit(int offset, boolean enable) {
-        this.value = enable ? 1 << offset | value : ~(1 << offset) & value;
-    }
-
-    public int getValue() {
-        return value;
+        this.flagBits = enable ? 1 << offset | flagBits : ~(1 << offset) & flagBits;
     }
 }

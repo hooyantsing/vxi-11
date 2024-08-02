@@ -28,7 +28,7 @@ public class DeviceError implements XdrAble {
         error = new DeviceErrorCode(xdr);
     }
 
-    public int getError() {
-        return error.getValue();
+    public DeviceErrorCode getError() {
+        return error;
     }
 }

@@ -5,7 +5,7 @@ import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.XdrAble;
 import xyz.hooy.vxi11.rpc.*;
 
-public class DeviceLinkClient {
+public class DeviceLinkClient implements AutoCloseable {
 
     private final Vxi11Client client;
 
@@ -13,30 +13,16 @@ public class DeviceLinkClient {
 
     private boolean closed = false;
 
-    public DeviceLinkClient(Vxi11Client client, int link) {
+    public DeviceLinkClient(Vxi11Client client, int linkId) {
         this.client = client;
-        this.link = new DeviceLink(link);
-    }
-
-    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
-        try {
-            channel.call(procedureNumber, params, result);
-        } catch (OncRpcException e) {
-            throw new Vxi11Exception(e);
-        }
-    }
-
-    private void checkError(int errorCode) {
-        if (errorCode != ErrorCode.NO_ERROR) {
-            throw new Vxi11Exception(errorCode);
-        }
+        this.link = new DeviceLink(linkId);
     }
 
     public void destroyLink() {
         if (!closed) {
             DeviceError response = new DeviceError();
             call(client.coreChannel, DeviceCore.Options.DESTROY_LINK, link, response);
-            checkError(response.getError());
+            response.getError().checkErrorThrowException();
             this.closed = true;
         }
     }
@@ -45,11 +31,28 @@ public class DeviceLinkClient {
         DeviceWriteParams request = new DeviceWriteParams(link, ioTimeout, lockTimeout, new DeviceFlags(enableTerminationCharacter, enableEnd, enableWaitLock), data);
         DeviceWriteResponse response = new DeviceWriteResponse();
         call(client.coreChannel, DeviceCore.Options.DEVICE_WRITE, request, response);
-        checkError(response.getError());
+        response.getError().checkErrorThrowException();
         return response.getSize();
+    }
+
+    public byte[] deviceRead() {
+        return null;
     }
 
     public boolean isClosed() {
         return closed;
+    }
+
+    @Override
+    public void close() throws Exception {
+        destroyLink();
+    }
+
+    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
+        try {
+            channel.call(procedureNumber, params, result);
+        } catch (OncRpcException e) {
+            throw new Vxi11Exception(e);
+        }
     }
 }

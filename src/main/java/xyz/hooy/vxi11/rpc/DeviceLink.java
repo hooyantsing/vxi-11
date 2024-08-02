@@ -5,10 +5,10 @@ import java.io.IOException;
 
 public class DeviceLink implements XdrAble {
 
-    private int value;
+    private int linkId;
 
-    public DeviceLink(int value) {
-        this.value = value;
+    public DeviceLink(int linkId) {
+        this.linkId = linkId;
     }
 
     public DeviceLink(XdrDecodingStream xdr) throws OncRpcException, IOException {
@@ -17,15 +17,15 @@ public class DeviceLink implements XdrAble {
 
     @Override
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        xdr.xdrEncodeInt(value);
+        xdr.xdrEncodeInt(linkId);
     }
 
     @Override
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        value = xdr.xdrDecodeInt();
+        linkId = xdr.xdrDecodeInt();
     }
 
-    public int getValue() {
-        return value;
+    public int getLinkId() {
+        return linkId;
     }
 }
