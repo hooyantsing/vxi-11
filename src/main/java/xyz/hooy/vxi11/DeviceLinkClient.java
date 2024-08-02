@@ -27,16 +27,28 @@ public class DeviceLinkClient implements AutoCloseable {
         }
     }
 
-    public long deviceWrite(byte[] data, int ioTimeout, int lockTimeout, boolean enableTerminationCharacter, boolean enableEnd, boolean enableWaitLock) {
-        DeviceWriteParams request = new DeviceWriteParams(link, ioTimeout, lockTimeout, new DeviceFlags(enableTerminationCharacter, enableEnd, enableWaitLock), data);
+    public long deviceWrite(byte[] data, int ioTimeout, int lockTimeout, boolean enableEnd, boolean enableWaitLock) {
+        DeviceWriteParams request = new DeviceWriteParams(link, data, ioTimeout, lockTimeout, new DeviceFlags(false, enableEnd, enableWaitLock));
         DeviceWriteResponse response = new DeviceWriteResponse();
         call(client.coreChannel, DeviceCore.Options.DEVICE_WRITE, request, response);
         response.getError().checkErrorThrowException();
         return response.getSize();
     }
 
-    public byte[] deviceRead() {
-        return null;
+    public byte[] deviceRead(int requestSize, int ioTimeout, int lockTimeout, byte terminationCharacter, boolean enableTerminationCharacter, boolean enableWaitLock) {
+        DeviceReadParams request = new DeviceReadParams(link, requestSize, ioTimeout, lockTimeout, terminationCharacter, new DeviceFlags(enableTerminationCharacter, false, enableWaitLock));
+        DeviceReadResponse response = new DeviceReadResponse();
+        call(client.coreChannel, DeviceCore.Options.DEVICE_READ, request, response);
+        response.getError().checkErrorThrowException();
+        return response.getData();
+    }
+
+    public byte deviceReadStb(int ioTimeout, int lockTimeout, boolean enableWaitLock) {
+        DeviceGenericParams request = new DeviceGenericParams(link, ioTimeout, lockTimeout, new DeviceFlags(false, false, enableWaitLock));
+        DeviceReadStbResponse response = new DeviceReadStbResponse();
+        call(client.coreChannel, DeviceCore.Options.DEVICE_READ_STB, request, response);
+        response.getError().checkErrorThrowException();
+        return response.getStb();
     }
 
     public boolean isClosed() {

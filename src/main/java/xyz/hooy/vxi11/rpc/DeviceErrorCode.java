@@ -10,7 +10,7 @@ public class DeviceErrorCode implements XdrAble {
 
     private int errorId;
 
-    public DeviceErrorCode(XdrDecodingStream xdr) throws OncRpcException, IOException {
+    protected DeviceErrorCode(XdrDecodingStream xdr) throws OncRpcException, IOException {
         xdrDecode(xdr);
     }
 

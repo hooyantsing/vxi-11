@@ -20,7 +20,7 @@ public class DeviceFlags implements XdrAble {
         enableWaitLock(waitLock);
     }
 
-    public DeviceFlags(XdrDecodingStream xdr) throws OncRpcException, IOException {
+    protected DeviceFlags(XdrDecodingStream xdr) throws OncRpcException, IOException {
         xdrDecode(xdr);
     }
 

@@ -11,7 +11,7 @@ public class DeviceLink implements XdrAble {
         this.linkId = linkId;
     }
 
-    public DeviceLink(XdrDecodingStream xdr) throws OncRpcException, IOException {
+    protected DeviceLink(XdrDecodingStream xdr) throws OncRpcException, IOException {
         xdrDecode(xdr);
     }
 

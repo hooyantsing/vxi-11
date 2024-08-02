@@ -1,6 +1,7 @@
 package xyz.hooy.vxi11.rpc;
 
 import org.acplt.oncrpc.*;
+
 import java.io.IOException;
 
 public class DeviceWriteParams implements XdrAble {
@@ -9,9 +10,9 @@ public class DeviceWriteParams implements XdrAble {
     private int ioTimeout;
     private int lockTimeout;
     private DeviceFlags flags;
-    private byte [] data;
+    private byte[] data;
 
-    public DeviceWriteParams(DeviceLink link, int ioTimeout, int lockTimeout, DeviceFlags flags, byte[] data) {
+    public DeviceWriteParams(DeviceLink link, byte[] data, int ioTimeout, int lockTimeout, DeviceFlags flags) {
         this.link = link;
         this.ioTimeout = ioTimeout;
         this.lockTimeout = lockTimeout;

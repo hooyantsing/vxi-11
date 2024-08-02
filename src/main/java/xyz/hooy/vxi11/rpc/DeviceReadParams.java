@@ -8,7 +8,7 @@ import org.acplt.oncrpc.XdrEncodingStream;
 import java.io.IOException;
 
 public class DeviceReadParams implements XdrAble {
-    
+
     private DeviceLink link;
     private int requestSize;
     private int ioTimeout;
@@ -16,7 +16,7 @@ public class DeviceReadParams implements XdrAble {
     private DeviceFlags flags;
     private byte terminationCharacter;
 
-    public DeviceReadParams(DeviceLink link, int requestSize, int ioTimeout, int lockTimeout, DeviceFlags flags, byte terminationCharacter) {
+    public DeviceReadParams(DeviceLink link, int requestSize, int ioTimeout, int lockTimeout, byte terminationCharacter, DeviceFlags flags) {
         this.link = link;
         this.requestSize = requestSize;
         this.ioTimeout = ioTimeout;
@@ -25,10 +25,11 @@ public class DeviceReadParams implements XdrAble {
         this.terminationCharacter = terminationCharacter;
     }
 
-    public DeviceReadParams(XdrDecodingStream xdr) throws OncRpcException, IOException {
+    protected DeviceReadParams(XdrDecodingStream xdr) throws OncRpcException, IOException {
         xdrDecode(xdr);
     }
 
+    @Override
     public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
         link.xdrEncode(xdr);
         xdr.xdrEncodeInt(requestSize);
@@ -38,6 +39,7 @@ public class DeviceReadParams implements XdrAble {
         xdr.xdrEncodeByte(terminationCharacter);
     }
 
+    @Override
     public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
         link = new DeviceLink(xdr);
         requestSize = xdr.xdrDecodeInt();
