@@ -14,10 +14,7 @@ public class DeviceFlags implements XdrAble {
 
     private int flagBits = 0;
 
-    public DeviceFlags(boolean terminationCharacter, boolean end, boolean waitLock) {
-        enableTerminationCharacter(terminationCharacter);
-        enableEnd(end);
-        enableWaitLock(waitLock);
+    public DeviceFlags() {
     }
 
     protected DeviceFlags(XdrDecodingStream xdr) throws OncRpcException, IOException {
@@ -46,16 +43,19 @@ public class DeviceFlags implements XdrAble {
         return flagBits >> WAIT_LOCK_OFFSET == 1;
     }
 
-    public void enableTerminationCharacter(boolean enable) {
+    public DeviceFlags enableTerminationCharacter(boolean enable) {
         offsetBit(TERMINATION_CHARACTER_OFFSET, enable);
+        return this;
     }
 
-    public void enableEnd(boolean enable) {
+    public DeviceFlags enableEnd(boolean enable) {
         offsetBit(END_OFFSET, enable);
+        return this;
     }
 
-    public void enableWaitLock(boolean enable) {
+    public DeviceFlags enableWaitLock(boolean enable) {
         offsetBit(WAIT_LOCK_OFFSET, enable);
+        return this;
     }
 
     private void offsetBit(int offset, boolean enable) {
