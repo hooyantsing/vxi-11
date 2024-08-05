@@ -41,7 +41,15 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    public Vxi11LinkClient createLink(String device, boolean lockDevice, int lockTimeout) {
+    public Vxi11LinkClient createLink(String device) {
+        return createLink(device, false, 0);
+    }
+
+    public Vxi11LinkClient createLink(String device, int lockTimeout) {
+        return createLink(device, true, lockTimeout);
+    }
+
+    private Vxi11LinkClient createLink(String device, boolean lockDevice, int lockTimeout) {
         CreateLinkParams request = new CreateLinkParams(clientId, lockDevice, lockTimeout, device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
@@ -57,7 +65,7 @@ public class Vxi11Client implements AutoCloseable {
                 log.warn("Link {} failed to establish the abort channel, the instrument may not support it.", response.getLink().getLinkId());
             }
         }
-        Vxi11LinkClient link = new Vxi11LinkClient(this, response.getLink().getLinkId());
+        Vxi11LinkClient link = new Vxi11LinkClient(this, response);
         links.add(link);
         return link;
     }
