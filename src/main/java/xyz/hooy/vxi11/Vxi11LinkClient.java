@@ -4,13 +4,19 @@ import org.acplt.oncrpc.OncRpcClient;
 import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.OncRpcTimeoutException;
 import org.acplt.oncrpc.XdrAble;
+import xyz.hooy.vxi11.entity.ByteArrayBuffer;
+import xyz.hooy.vxi11.entity.Channels;
+import xyz.hooy.vxi11.entity.ErrorCode;
+import xyz.hooy.vxi11.exception.Vxi11Exception;
 import xyz.hooy.vxi11.rpc.*;
 
 import java.time.Instant;
 
 public class Vxi11LinkClient implements AutoCloseable {
 
-    private final static int DEFAULT_IO_TIMEOUT = 30000;
+    private final static int DEFAULT_IO_BUFFER = 8192;
+
+    private final static int DEFAULT_IO_TIMEOUT = 20000;
 
     private final Vxi11Client client;
 
@@ -27,59 +33,100 @@ public class Vxi11LinkClient implements AutoCloseable {
     }
 
     public int write(byte[] data) {
-        return write(data, DEFAULT_IO_TIMEOUT, false, 0);
+        return deviceWrite(data, DEFAULT_IO_TIMEOUT, false, 0);
     }
 
     public int write(byte[] data, int ioTimeout) {
-        return write(data, ioTimeout, false, 0);
+        return deviceWrite(data, ioTimeout, false, 0);
     }
 
     public int write(byte[] data, int ioTimeout, int lockTimeout) {
-        return write(data, ioTimeout, true, lockTimeout);
+        return deviceWrite(data, ioTimeout, true, lockTimeout);
     }
 
-    private int write(byte[] data, int ioTimeout, boolean enableWaitLock, int lockTimeout) {
+    private int deviceWrite(byte[] data, int ioTimeout, boolean enableWaitLock, int lockTimeout) {
         int writeSize = 0;
         int remainingTime = ioTimeout;
-        if (writeSize < data.length) {
+        while (writeSize < data.length) {
             if (remainingTime < 0) throw new Vxi11Exception(ErrorCode.IO_TIMEOUT);
             long startTime = Instant.now().toEpochMilli();
             byte[] block = new byte[Math.min(data.length - writeSize, writeBlockSize)];
             System.arraycopy(data, writeSize, block, 0, block.length);
-            write0(block, remainingTime, enableWaitLock, lockTimeout, writeSize + writeBlockSize >= data.length);
+            DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(false).enableEnd(writeSize + writeBlockSize >= data.length).enableWaitLock(enableWaitLock);
+            DeviceWriteParams request = new DeviceWriteParams(link, block, remainingTime, lockTimeout, deviceFlags);
+            DeviceWriteResponse response = new DeviceWriteResponse();
+            call(client.coreChannel, Channels.Core.Options.DEVICE_WRITE, request, response, remainingTime);
+            response.getError().checkErrorThrowException();
             writeSize += block.length;
             remainingTime -= (int) (Instant.now().toEpochMilli() - startTime);
         }
         return writeSize;
     }
 
-    private void write0(byte[] data, int ioTimeout, boolean enableWaitLock, int lockTimeout, boolean enableEnd) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(false).enableEnd(enableEnd).enableWaitLock(enableWaitLock);
-        DeviceWriteParams request = new DeviceWriteParams(link, data, ioTimeout, lockTimeout, deviceFlags);
-        DeviceWriteResponse response = new DeviceWriteResponse();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_WRITE, request, response, ioTimeout);
-        response.getError().checkErrorThrowException();
+    public byte[] read(int requestSize) {
+        return read(requestSize, DEFAULT_IO_TIMEOUT);
     }
 
-    public byte[] read(int requestSize, int ioTimeout, int lockTimeout, byte terminationCharacter, boolean enableTerminationCharacter, boolean enableWaitLock) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(enableTerminationCharacter).enableEnd(false).enableWaitLock(enableWaitLock);
-        DeviceReadParams request = new DeviceReadParams(link, requestSize, ioTimeout, lockTimeout, terminationCharacter, deviceFlags);
-        DeviceReadResponse response = new DeviceReadResponse();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_READ, request, response);
-        response.getError().checkErrorThrowException();
-        return response.getData();
+    public byte[] read(int requestSize, int ioTimeout) {
+        return deviceRead(requestSize, ioTimeout, false, 0, false, (byte) 0);
     }
 
-    public byte readStb(int ioTimeout, int lockTimeout, boolean enableWaitLock) {
+    public byte[] read(int requestSize, int ioTimeout, int lockTimeout) {
+        return deviceRead(requestSize, ioTimeout, true, lockTimeout, false, (byte) 0);
+    }
+
+    public byte[] read(byte terminationCharacter) {
+        return read(terminationCharacter, DEFAULT_IO_TIMEOUT);
+    }
+
+    public byte[] read(byte terminationCharacter, int ioTimeout) {
+        return deviceRead(DEFAULT_IO_BUFFER, ioTimeout, false, 0, true, terminationCharacter);
+    }
+
+    public byte[] read(byte terminationCharacter, int ioTimeout, int lockTimeout) {
+        return deviceRead(DEFAULT_IO_BUFFER, ioTimeout, true, lockTimeout, true, terminationCharacter);
+    }
+
+    private byte[] deviceRead(int requestSize, int ioTimeout, boolean enableWaitLock, int lockTimeout, boolean enableTerminationCharacter, byte terminationCharacter) {
+        DeviceReadResponse response;
+        ByteArrayBuffer buffer = new ByteArrayBuffer();
+        int remainingTime = ioTimeout;
+        do {
+            if (remainingTime < 0) throw new Vxi11Exception(ErrorCode.IO_TIMEOUT);
+            long startTime = Instant.now().toEpochMilli();
+            DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(enableTerminationCharacter).enableEnd(false).enableWaitLock(enableWaitLock);
+            DeviceReadParams request = new DeviceReadParams(link, requestSize, remainingTime, lockTimeout, terminationCharacter, deviceFlags);
+            response = new DeviceReadResponse();
+            call(client.coreChannel, Channels.Core.Options.DEVICE_READ, request, response, remainingTime);
+            response.getError().checkErrorThrowException();
+            buffer.append(response.getData());
+            remainingTime -= (int) (Instant.now().toEpochMilli() - startTime);
+        } while (response.noReason());
+        return buffer.toByteArray();
+    }
+
+    public byte readStb() {
+        return readStb(DEFAULT_IO_TIMEOUT);
+    }
+
+    public byte readStb(int ioTimeout) {
+        return deviceReadStb(ioTimeout, false, 0);
+    }
+
+    public byte readStb(int ioTimeout, int lockTimeout) {
+        return deviceReadStb(ioTimeout, true, lockTimeout);
+    }
+
+    private byte deviceReadStb(int ioTimeout, boolean enableWaitLock, int lockTimeout) {
         DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
         DeviceGenericParams request = new DeviceGenericParams(link, ioTimeout, lockTimeout, deviceFlags);
         DeviceReadStbResponse response = new DeviceReadStbResponse();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response);
+        call(client.coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response, ioTimeout);
         response.getError().checkErrorThrowException();
         return response.getStb();
     }
 
-    public void trigger(int ioTimeout, int lockTimeout, boolean enableWaitLock) {
+    public void trigger(int ioTimeout,boolean enableWaitLock, int lockTimeout) {
         DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
         DeviceGenericParams request = new DeviceGenericParams(link, ioTimeout, lockTimeout, deviceFlags);
         DeviceError response = new DeviceError();

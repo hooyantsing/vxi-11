@@ -1,4 +1,4 @@
-package xyz.hooy.vxi11;
+package xyz.hooy.vxi11.entity;
 
 public final class Channels {
 

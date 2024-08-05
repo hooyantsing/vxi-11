@@ -1,4 +1,6 @@
-package xyz.hooy.vxi11;
+package xyz.hooy.vxi11.exception;
+
+import xyz.hooy.vxi11.entity.ErrorCode;
 
 public class Vxi11Exception extends RuntimeException{
 

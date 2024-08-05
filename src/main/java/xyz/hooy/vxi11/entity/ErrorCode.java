@@ -1,4 +1,4 @@
-package xyz.hooy.vxi11;
+package xyz.hooy.vxi11.entity;
 
 import java.lang.reflect.Field;
 

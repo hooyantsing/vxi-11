@@ -49,6 +49,10 @@ public class DeviceReadResponse implements XdrAble {
         return (reason & (1 << REQUESTED_COUNT_OFFSET)) != 0;
     }
 
+    public boolean noReason() {
+        return reason == 0;
+    }
+
     public DeviceErrorCode getError() {
         return error;
     }
