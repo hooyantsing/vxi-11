@@ -21,39 +21,39 @@ public class Vxi11Client {
 
     private final InetAddress host;
 
-    private final short port;
+    private final int port;
 
     protected OncRpcClient coreChannel;
 
     protected OncRpcClient abortChannel;
 
-    public Vxi11Client(InetAddress host, short port) {
+    public Vxi11Client(InetAddress host, int port) {
         this.host = host;
         this.port = port;
         try {
-            this.coreChannel = OncRpcClient.newOncRpcClient(host, DeviceCore.PROGRAM, DeviceCore.VERSION, port, OncRpcProtocols.ONCRPC_TCP);
+            this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, port, OncRpcProtocols.ONCRPC_TCP);
         } catch (OncRpcException | IOException e) {
             throw new Vxi11Exception(e);
         }
     }
 
-    public DeviceLinkClient createLink(String device, boolean lockDevice, int lockTimeout) {
+    public Vxi11LinkClient createLink(String device, boolean lockDevice, int lockTimeout) {
         CreateLinkParams request = new CreateLinkParams(clientId, lockDevice, lockTimeout, device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
-            coreChannel.call(DeviceCore.Options.CREATE_LINK, request, response);
+            coreChannel.call(Channels.Core.Options.CREATE_LINK, request, response);
         } catch (OncRpcException e) {
             throw new Vxi11Exception(e);
         }
         response.getError().checkErrorThrowException();
         if (!connectedAbortChannel()) {
             try {
-                this.abortChannel = OncRpcClient.newOncRpcClient(host, DeviceCore.PROGRAM, DeviceCore.VERSION, response.getAbortPort(), OncRpcProtocols.ONCRPC_TCP);
+                this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, response.getAbortPort(), OncRpcProtocols.ONCRPC_TCP);
             } catch (OncRpcException | IOException e) {
-                log.warn("Link {} failed to establish the termination channel, the instrument may not support it.", response.getLink().getLinkId());
+                log.warn("Link {} failed to establish the abort channel, the instrument may not support it.", response.getLink().getLinkId());
             }
         }
-        return new DeviceLinkClient(this, response.getLink().getLinkId());
+        return new Vxi11LinkClient(this, response.getLink().getLinkId());
     }
 
     public boolean connectedAbortChannel() {
@@ -68,7 +68,7 @@ public class Vxi11Client {
         return host;
     }
 
-    public short getPort() {
+    public int getPort() {
         return port;
     }
 }
