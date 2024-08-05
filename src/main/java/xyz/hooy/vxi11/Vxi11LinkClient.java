@@ -4,11 +4,9 @@ import org.acplt.oncrpc.OncRpcClient;
 import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.OncRpcTimeoutException;
 import org.acplt.oncrpc.XdrAble;
-import xyz.hooy.vxi11.entity.ByteArrayBuffer;
-import xyz.hooy.vxi11.entity.Channels;
-import xyz.hooy.vxi11.entity.ErrorCode;
-import xyz.hooy.vxi11.exception.Vxi11Exception;
 import xyz.hooy.vxi11.rpc.*;
+import xyz.hooy.vxi11.entity.*;
+import xyz.hooy.vxi11.exception.*;
 
 public class Vxi11LinkClient implements AutoCloseable {
 
@@ -20,7 +18,7 @@ public class Vxi11LinkClient implements AutoCloseable {
 
     private final int writeBlockSize;
 
-    private boolean closed = false;
+    private volatile boolean closed = false;
 
     protected Vxi11LinkClient(Vxi11Client client, CreateLinkResponse response) {
         this.client = client;

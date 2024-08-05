@@ -76,6 +76,13 @@ public class Vxi11Client implements AutoCloseable {
         return Objects.nonNull(abortChannel);
     }
 
+    public void setTimeout(int timeout) {
+        coreChannel.setTimeout(timeout);
+        if (connectedAbortChannel()) {
+            abortChannel.setTimeout(timeout);
+        }
+    }
+
     @Override
     public void close() {
         for (Vxi11LinkClient link : links) {
