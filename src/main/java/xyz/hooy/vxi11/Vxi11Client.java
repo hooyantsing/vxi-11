@@ -10,10 +10,12 @@ import xyz.hooy.vxi11.rpc.CreateLinkResponse;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 
-public class Vxi11Client {
+public class Vxi11Client implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Vxi11Client.class);
 
@@ -22,6 +24,8 @@ public class Vxi11Client {
     private final InetAddress host;
 
     private final int port;
+
+    private final List<Vxi11LinkClient> links = new ArrayList<>();
 
     protected OncRpcClient coreChannel;
 
@@ -53,11 +57,30 @@ public class Vxi11Client {
                 log.warn("Link {} failed to establish the abort channel, the instrument may not support it.", response.getLink().getLinkId());
             }
         }
-        return new Vxi11LinkClient(this, response.getLink().getLinkId());
+        Vxi11LinkClient link = new Vxi11LinkClient(this, response.getLink().getLinkId());
+        links.add(link);
+        return link;
     }
 
     public boolean connectedAbortChannel() {
         return Objects.nonNull(abortChannel);
+    }
+
+    @Override
+    public void close() {
+        for (Vxi11LinkClient link : links) {
+            if (!link.isClosed()) {
+                link.close();
+            }
+        }
+        try {
+            coreChannel.close();
+            if (connectedAbortChannel()) {
+                abortChannel.close();
+            }
+        } catch (OncRpcException e) {
+            log.warn("Close channel failed.", e);
+        }
     }
 
     public int getClientId() {

@@ -5,8 +5,6 @@ import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.XdrAble;
 import xyz.hooy.vxi11.rpc.*;
 
-import java.util.Objects;
-
 public class Vxi11LinkClient implements AutoCloseable {
 
     private final Vxi11Client client;
@@ -94,12 +92,11 @@ public class Vxi11LinkClient implements AutoCloseable {
     }
 
     public void abort() {
-        OncRpcClient abortChannel = client.abortChannel;
-        if (Objects.isNull(abortChannel)) {
+        if (!client.connectedAbortChannel()) {
             throw new UnsupportedOperationException("No channel established, method not supported.");
         }
         DeviceError response = new DeviceError();
-        call(abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
+        call(client.abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
         response.getError().checkErrorThrowException();
     }
 
