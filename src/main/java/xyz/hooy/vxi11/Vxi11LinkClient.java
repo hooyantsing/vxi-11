@@ -10,37 +10,31 @@ import xyz.hooy.vxi11.exception.*;
 
 public class Vxi11LinkClient implements AutoCloseable {
 
-    private final static int DEFAULT_IO_BUFFER = 8192;
+    private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
+
+    private final static int DEFAULT_LOCK_TIMEOUT = 0;
 
     private final Vxi11Client client;
 
     private final DeviceLink link;
 
-    private final int writeBlockSize;
+    private final int blockSize;
 
     private volatile boolean closed = false;
 
     protected Vxi11LinkClient(Vxi11Client client, CreateLinkResponse response) {
         this.client = client;
         this.link = response.getLink();
-        this.writeBlockSize = response.getMaxReceiveSize();
+        this.blockSize = response.getMaxReceiveSize();
     }
 
-    public int write(byte[] data) {
-        return deviceWrite(data, false, 0);
-    }
-
-    public int write(byte[] data, int lockTimeout) {
-        return deviceWrite(data, true, lockTimeout);
-    }
-
-    private int deviceWrite(byte[] data, boolean enableWaitLock, int lockTimeout) {
+    private int deviceWrite(byte[] data, int ioTimeout, int lockTimeout) {
         int writeSize = 0;
         while (writeSize < data.length) {
-            byte[] block = new byte[Math.min(data.length - writeSize, writeBlockSize)];
+            byte[] block = new byte[Math.min(data.length - writeSize, blockSize)];
             System.arraycopy(data, writeSize, block, 0, block.length);
-            DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(false).enableEnd(writeSize + writeBlockSize >= data.length).enableWaitLock(enableWaitLock);
-            DeviceWriteParams request = new DeviceWriteParams(link, block, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
+            DeviceFlags deviceFlags = new DeviceFlags().enableEnd(writeSize + blockSize >= data.length).enableWaitLock(lockTimeout > 0);
+            DeviceWriteParams request = new DeviceWriteParams(link, block, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
             DeviceWriteResponse response = new DeviceWriteResponse();
             call(client.coreChannel, Channels.Core.Options.DEVICE_WRITE, request, response);
             response.getError().checkErrorThrowException();
@@ -49,146 +43,57 @@ public class Vxi11LinkClient implements AutoCloseable {
         return writeSize;
     }
 
-
-    public byte[] read(int requestSize) {
-        return deviceRead(requestSize, false, 0, false, (byte) 0);
-    }
-
-    public byte[] read(int requestSize, int lockTimeout) {
-        return deviceRead(requestSize, true, lockTimeout, false, (byte) 0);
-    }
-
-    public byte[] read(byte terminationCharacter) {
-        return deviceRead(DEFAULT_IO_BUFFER, false, 0, true, terminationCharacter);
-    }
-
-    public byte[] read(byte terminationCharacter, int lockTimeout) {
-        return deviceRead(DEFAULT_IO_BUFFER, true, lockTimeout, true, terminationCharacter);
-    }
-
-    private byte[] deviceRead(int requestSize, boolean enableWaitLock, int lockTimeout, boolean enableTerminationCharacter, byte terminationCharacter) {
+    private byte[] deviceRead(byte terminationCharacter, int ioTimeout, int lockTimeout) {
         DeviceReadResponse response;
         ByteArrayBuffer buffer = new ByteArrayBuffer();
+        READ_TERMINATION:
         do {
-            DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(enableTerminationCharacter).enableEnd(false).enableWaitLock(enableWaitLock);
-            DeviceReadParams request = new DeviceReadParams(link, requestSize, client.coreChannel.getTimeout(), lockTimeout, terminationCharacter, deviceFlags);
+            DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(true).enableWaitLock(lockTimeout > 0);
+            DeviceReadParams request = new DeviceReadParams(link, blockSize, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), terminationCharacter, deviceFlags);
             response = new DeviceReadResponse();
             call(client.coreChannel, Channels.Core.Options.DEVICE_READ, request, response);
             response.getError().checkErrorThrowException();
-            buffer.append(response.getData());
+            for (byte data : response.getData()) {
+                buffer.append(data);
+                if (data == terminationCharacter) break READ_TERMINATION;
+            }
         } while (response.noReason());
         return buffer.toByteArray();
     }
 
-    public byte readStb() {
-        return deviceReadStb(false, 0);
-    }
-
-    public byte readStb(int lockTimeout) {
-        return deviceReadStb(true, lockTimeout);
-    }
-
-    private byte deviceReadStb(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceGenericParams request = new DeviceGenericParams(link, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
+    private byte deviceReadStb(int ioTimeout, int lockTimeout) {
+        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
+        DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
         DeviceReadStbResponse response = new DeviceReadStbResponse();
         call(client.coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response);
         response.getError().checkErrorThrowException();
         return response.getStb();
     }
 
-    public void trigger() {
-        deviceTrigger(false, 0);
+    private void deviceTrigger(int ioTimeout, int lockTimeout) {
+        genericRpc(Channels.Core.Options.DEVICE_TRIGGER, ioTimeout, lockTimeout);
     }
 
-    public void trigger(int lockTimeout) {
-        deviceTrigger(true, lockTimeout);
+    private void deviceClear(int ioTimeout, int lockTimeout) {
+        genericRpc(Channels.Core.Options.DEVICE_CLEAR, ioTimeout, lockTimeout);
     }
 
-    private void deviceTrigger(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceGenericParams request = new DeviceGenericParams(link, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
-        DeviceError response = new DeviceError();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_TRIGGER, request, response);
-        response.getError().checkErrorThrowException();
+    private void deviceRemote(int ioTimeout, int lockTimeout) {
+        genericRpc(Channels.Core.Options.DEVICE_REMOTE, ioTimeout, lockTimeout);
     }
 
-    public void clear() {
-        deviceClear(false, 0);
+    private void deviceLocal(int ioTimeout, int lockTimeout) {
+        genericRpc(Channels.Core.Options.DEVICE_LOCAL, ioTimeout, lockTimeout);
     }
 
-    public void clear(int lockTimeout) {
-        deviceClear(true, lockTimeout);
-    }
-
-    private void deviceClear(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceGenericParams request = new DeviceGenericParams(link, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
-        DeviceError response = new DeviceError();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_CLEAR, request, response);
-        response.getError().checkErrorThrowException();
-    }
-
-    public void remote() {
-        deviceRemote(false, 0);
-    }
-
-    public void remote(int lockTimeout) {
-        deviceRemote(true, lockTimeout);
-    }
-
-    private void deviceRemote(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceGenericParams request = new DeviceGenericParams(link, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
-        DeviceError response = new DeviceError();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_REMOTE, request, response);
-        response.getError().checkErrorThrowException();
-    }
-
-    public void local() {
-        deviceLocal(false, 0);
-    }
-
-    public void local(int lockTimeout) {
-        deviceLocal(true, lockTimeout);
-    }
-
-    private void deviceLocal(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceGenericParams request = new DeviceGenericParams(link, client.coreChannel.getTimeout(), lockTimeout, deviceFlags);
-        DeviceError response = new DeviceError();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_LOCAL, request, response);
-        response.getError().checkErrorThrowException();
-    }
-
-    public void lock() {
-        deviceLock(false, 0);
-    }
-
-    public void lock(int lockTimeout) {
-        deviceLock(true, lockTimeout);
-    }
-
-    private void deviceLock(boolean enableWaitLock, int lockTimeout) {
-        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(enableWaitLock);
-        DeviceLockParams request = new DeviceLockParams(link, lockTimeout, deviceFlags);
-        DeviceError response = new DeviceError();
-        call(client.coreChannel, Channels.Core.Options.DEVICE_LOCK, request, response);
-        response.getError().checkErrorThrowException();
-    }
-
-    public void unlock() {
-        deviceUnlock();
+    private void deviceLock(int ioTimeout, int lockTimeout) {
+        genericRpc(Channels.Core.Options.DEVICE_LOCK, ioTimeout, lockTimeout);
     }
 
     private void deviceUnlock() {
         DeviceError response = new DeviceError();
         call(client.coreChannel, Channels.Core.Options.DEVICE_UNLOCK, link, response);
         response.getError().checkErrorThrowException();
-    }
-
-    public void abort() {
-        deviceAbort();
     }
 
     private void deviceAbort() {
@@ -208,6 +113,14 @@ public class Vxi11LinkClient implements AutoCloseable {
         } catch (OncRpcException e) {
             throw new Vxi11Exception(e);
         }
+    }
+
+    protected void genericRpc(int options, int ioTimeout, int lockTimeout) {
+        DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
+        DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
+        DeviceError response = new DeviceError();
+        call(client.coreChannel, options, request, response);
+        response.getError().checkErrorThrowException();
     }
 
     public boolean isClosed() {
