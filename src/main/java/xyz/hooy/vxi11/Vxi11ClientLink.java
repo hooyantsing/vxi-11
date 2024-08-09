@@ -8,7 +8,7 @@ import xyz.hooy.vxi11.rpc.*;
 import xyz.hooy.vxi11.entity.*;
 import xyz.hooy.vxi11.exception.*;
 
-public class Vxi11LinkClient implements AutoCloseable {
+public class Vxi11ClientLink implements AutoCloseable {
 
     private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
 
@@ -22,7 +22,7 @@ public class Vxi11LinkClient implements AutoCloseable {
 
     private volatile boolean closed = false;
 
-    protected Vxi11LinkClient(Vxi11Client client, CreateLinkResponse response) {
+    protected Vxi11ClientLink(Vxi11Client client, CreateLinkResponse response) {
         this.client = client;
         this.link = response.getLink();
         this.blockSize = response.getMaxReceiveSize();

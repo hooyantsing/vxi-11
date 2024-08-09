@@ -1,7 +1,6 @@
 package xyz.hooy.vxi11.rpc;
 
 import org.acplt.oncrpc.*;
-import xyz.hooy.vxi11.entity.ErrorCode;
 import xyz.hooy.vxi11.exception.Vxi11Exception;
 
 import java.io.IOException;

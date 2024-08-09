@@ -5,10 +5,8 @@ import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.OncRpcProtocols;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import xyz.hooy.vxi11.entity.Channels;
+import xyz.hooy.vxi11.rpc.*;
 import xyz.hooy.vxi11.exception.Vxi11Exception;
-import xyz.hooy.vxi11.rpc.CreateLinkParams;
-import xyz.hooy.vxi11.rpc.CreateLinkResponse;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -25,46 +23,77 @@ public class Vxi11Client implements AutoCloseable {
 
     private final InetAddress host;
 
-    private final int port;
-
-    private final List<Vxi11LinkClient> links = new ArrayList<>();
-
     protected OncRpcClient coreChannel;
 
     protected OncRpcClient abortChannel;
 
+    protected Vxi11ClientInterruptServer interruptChannel;
+    
+    private final List<Vxi11ClientLink> links = new ArrayList<>();
+
     public Vxi11Client(InetAddress host, int port) {
         this.host = host;
-        this.port = port;
+        // create core channel
         try {
             this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, port, OncRpcProtocols.ONCRPC_TCP);
         } catch (OncRpcException | IOException e) {
             throw new Vxi11Exception(e);
         }
+        // create interrupt channel
+        this.interruptChannel = new Vxi11ClientInterruptServer();
+        try {
+            int address = 0;
+            byte[] addressBytes = host.getAddress();
+            for (byte bytes : addressBytes) {
+                address <<= 8;
+                address |= (bytes & 0xFF);
+            }
+            DeviceRemoteFunction request = new DeviceRemoteFunction(address,9802,Channels.Interrupt.PROGRAM,Channels.Interrupt.PROGRAM);
+            DeviceError response = new DeviceError();
+            coreChannel.call(Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
+            response.getError().checkErrorThrowException();
+        } catch (Exception e) {
+            log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
+        }
     }
 
     @Override
     public void close() {
-        for (Vxi11LinkClient link : links) {
+        for (Vxi11ClientLink link : links) {
             if (!link.isClosed()) {
                 link.close();
             }
         }
+        links.clear();
         try {
             coreChannel.close();
-            if (connectedAbortChannel()) {
-                abortChannel.close();
-            }
         } catch (OncRpcException e) {
-            log.warn("Close channel failed.", e);
+            log.warn("Close core channel failed.", e);
         }
+        if (!connectedAbortChannel()){
+            try {
+                abortChannel.close();
+            } catch (OncRpcException e) {
+                log.warn("Close abort channel failed.", e);
+            }
+        }
+        if (!connectedInterruptChannel()){
+            try {
+                interruptChannel.close();
+            } catch (Exception e) {
+                log.warn("Close interrupt channel failed.", e);
+            }
+        }
+        this.interruptChannel = null;
+        this.abortChannel = null;
+        this.coreChannel = null;
     }
 
-    public Vxi11LinkClient createLink(String device) {
+    public Vxi11ClientLink createLink(String device) {
         return createLink(device, 0);
     }
 
-    public Vxi11LinkClient createLink(String device, int lockTimeout) {
+    public Vxi11ClientLink createLink(String device, int lockTimeout) {
         CreateLinkParams request = new CreateLinkParams(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
@@ -80,13 +109,9 @@ public class Vxi11Client implements AutoCloseable {
                 log.warn("Link {} failed to establish the abort channel, the instrument may not support it.", response.getLink().getLinkId());
             }
         }
-        Vxi11LinkClient link = new Vxi11LinkClient(this, response);
+        Vxi11ClientLink link = new Vxi11ClientLink(this, response);
         links.add(link);
         return link;
-    }
-
-    public boolean connectedAbortChannel() {
-        return Objects.nonNull(abortChannel);
     }
 
     public void setTimeout(int timeout) {
@@ -96,15 +121,11 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    public int getClientId() {
-        return clientId;
+    public boolean connectedAbortChannel() {
+        return Objects.nonNull(abortChannel);
     }
 
-    public InetAddress getHost() {
-        return host;
-    }
-
-    public int getPort() {
-        return port;
+    public boolean connectedInterruptChannel() {
+        return Objects.nonNull(interruptChannel);
     }
 }
