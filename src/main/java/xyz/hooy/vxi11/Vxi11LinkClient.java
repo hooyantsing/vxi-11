@@ -28,7 +28,21 @@ public class Vxi11LinkClient implements AutoCloseable {
         this.blockSize = response.getMaxReceiveSize();
     }
 
-    private int deviceWrite(byte[] data, int ioTimeout, int lockTimeout) {
+    @Override
+    public void close() {
+        if (!closed) {
+            DeviceError response = new DeviceError();
+            call(client.coreChannel, Channels.Core.Options.DESTROY_LINK, link, response);
+            response.getError().checkErrorThrowException();
+            this.closed = true;
+        }
+    }
+
+    public int write(byte[] data) {
+        return write(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public int write(byte[] data, int ioTimeout, int lockTimeout) {
         int writeSize = 0;
         while (writeSize < data.length) {
             byte[] block = new byte[Math.min(data.length - writeSize, blockSize)];
@@ -43,7 +57,11 @@ public class Vxi11LinkClient implements AutoCloseable {
         return writeSize;
     }
 
-    private byte[] deviceRead(byte terminationCharacter, int ioTimeout, int lockTimeout) {
+    public byte[] read(byte terminationCharacter) {
+        return read(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public byte[] read(byte terminationCharacter, int ioTimeout, int lockTimeout) {
         DeviceReadResponse response;
         ByteArrayBuffer buffer = new ByteArrayBuffer();
         READ_TERMINATION:
@@ -61,7 +79,11 @@ public class Vxi11LinkClient implements AutoCloseable {
         return buffer.toByteArray();
     }
 
-    private byte deviceReadStb(int ioTimeout, int lockTimeout) {
+    public byte readStb() {
+        return readStb(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public byte readStb(int ioTimeout, int lockTimeout) {
         DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
         DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
         DeviceReadStbResponse response = new DeviceReadStbResponse();
@@ -70,33 +92,53 @@ public class Vxi11LinkClient implements AutoCloseable {
         return response.getStb();
     }
 
-    private void deviceTrigger(int ioTimeout, int lockTimeout) {
+    public void trigger() {
+        trigger(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public void trigger(int ioTimeout, int lockTimeout) {
         genericRpc(Channels.Core.Options.DEVICE_TRIGGER, ioTimeout, lockTimeout);
     }
 
-    private void deviceClear(int ioTimeout, int lockTimeout) {
+    public void clear(){
+        clear(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public void clear(int ioTimeout, int lockTimeout) {
         genericRpc(Channels.Core.Options.DEVICE_CLEAR, ioTimeout, lockTimeout);
     }
 
-    private void deviceRemote(int ioTimeout, int lockTimeout) {
+    public void remote(){
+        remote(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public void remote(int ioTimeout, int lockTimeout) {
         genericRpc(Channels.Core.Options.DEVICE_REMOTE, ioTimeout, lockTimeout);
     }
 
-    private void deviceLocal(int ioTimeout, int lockTimeout) {
+    public void local(){
+        local(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public void local(int ioTimeout, int lockTimeout) {
         genericRpc(Channels.Core.Options.DEVICE_LOCAL, ioTimeout, lockTimeout);
     }
 
-    private void deviceLock(int ioTimeout, int lockTimeout) {
+    public void lock(){
+        lock(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public void lock(int ioTimeout, int lockTimeout) {
         genericRpc(Channels.Core.Options.DEVICE_LOCK, ioTimeout, lockTimeout);
     }
 
-    private void deviceUnlock() {
+    public void unlock() {
         DeviceError response = new DeviceError();
         call(client.coreChannel, Channels.Core.Options.DEVICE_UNLOCK, link, response);
         response.getError().checkErrorThrowException();
     }
 
-    private void deviceAbort() {
+    public void abort() {
         if (!client.connectedAbortChannel()) {
             throw new UnsupportedOperationException("No channel established, method not supported.");
         }
@@ -105,14 +147,8 @@ public class Vxi11LinkClient implements AutoCloseable {
         response.getError().checkErrorThrowException();
     }
 
-    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
-        try {
-            channel.call(procedureNumber, params, result);
-        } catch (OncRpcTimeoutException e) {
-            throw new Vxi11Exception(ErrorCode.IO_TIMEOUT);
-        } catch (OncRpcException e) {
-            throw new Vxi11Exception(e);
-        }
+    public boolean isClosed() {
+        return closed;
     }
 
     protected void genericRpc(int options, int ioTimeout, int lockTimeout) {
@@ -123,17 +159,13 @@ public class Vxi11LinkClient implements AutoCloseable {
         response.getError().checkErrorThrowException();
     }
 
-    public boolean isClosed() {
-        return closed;
-    }
-
-    @Override
-    public void close() {
-        if (!closed) {
-            DeviceError response = new DeviceError();
-            call(client.coreChannel, Channels.Core.Options.DESTROY_LINK, link, response);
-            response.getError().checkErrorThrowException();
-            this.closed = true;
+    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
+        try {
+            channel.call(procedureNumber, params, result);
+        } catch (OncRpcTimeoutException e) {
+            throw new Vxi11Exception(ErrorCode.IO_TIMEOUT);
+        } catch (OncRpcException e) {
+            throw new Vxi11Exception(e);
         }
     }
 }
