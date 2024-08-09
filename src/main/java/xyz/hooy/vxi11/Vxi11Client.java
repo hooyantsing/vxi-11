@@ -43,16 +43,29 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
+    @Override
+    public void close() {
+        for (Vxi11LinkClient link : links) {
+            if (!link.isClosed()) {
+                link.close();
+            }
+        }
+        try {
+            coreChannel.close();
+            if (connectedAbortChannel()) {
+                abortChannel.close();
+            }
+        } catch (OncRpcException e) {
+            log.warn("Close channel failed.", e);
+        }
+    }
+
     public Vxi11LinkClient createLink(String device) {
-        return createLink(device, false, 0);
+        return createLink(device, 0);
     }
 
     public Vxi11LinkClient createLink(String device, int lockTimeout) {
-        return createLink(device, true, lockTimeout);
-    }
-
-    private Vxi11LinkClient createLink(String device, boolean lockDevice, int lockTimeout) {
-        CreateLinkParams request = new CreateLinkParams(clientId, lockDevice, lockTimeout, device);
+        CreateLinkParams request = new CreateLinkParams(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
             coreChannel.call(Channels.Core.Options.CREATE_LINK, request, response);
@@ -80,23 +93,6 @@ public class Vxi11Client implements AutoCloseable {
         coreChannel.setTimeout(timeout);
         if (connectedAbortChannel()) {
             abortChannel.setTimeout(timeout);
-        }
-    }
-
-    @Override
-    public void close() {
-        for (Vxi11LinkClient link : links) {
-            if (!link.isClosed()) {
-                link.close();
-            }
-        }
-        try {
-            coreChannel.close();
-            if (connectedAbortChannel()) {
-                abortChannel.close();
-            }
-        } catch (OncRpcException e) {
-            log.warn("Close channel failed.", e);
         }
     }
 
