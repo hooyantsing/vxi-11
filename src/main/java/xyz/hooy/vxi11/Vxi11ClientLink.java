@@ -8,6 +8,9 @@ import xyz.hooy.vxi11.rpc.*;
 import xyz.hooy.vxi11.entity.*;
 import xyz.hooy.vxi11.exception.*;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class Vxi11ClientLink implements AutoCloseable {
 
     private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
@@ -18,13 +21,18 @@ public class Vxi11ClientLink implements AutoCloseable {
 
     private final DeviceLink link;
 
+    private final String handle;
+
     private final int blockSize;
 
     private volatile boolean closed = false;
 
+    private final Set<Vxi11ServiceRequestListener> serviceRequestListeners = new HashSet<>();
+
     protected Vxi11ClientLink(Vxi11Client client, CreateLinkResponse response) {
         this.client = client;
         this.link = response.getLink();
+        this.handle = "TODO";
         this.blockSize = response.getMaxReceiveSize();
     }
 
@@ -100,7 +108,7 @@ public class Vxi11ClientLink implements AutoCloseable {
         genericRpc(Channels.Core.Options.DEVICE_TRIGGER, ioTimeout, lockTimeout);
     }
 
-    public void clear(){
+    public void clear() {
         clear(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
 
@@ -108,7 +116,7 @@ public class Vxi11ClientLink implements AutoCloseable {
         genericRpc(Channels.Core.Options.DEVICE_CLEAR, ioTimeout, lockTimeout);
     }
 
-    public void remote(){
+    public void remote() {
         remote(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
 
@@ -116,7 +124,7 @@ public class Vxi11ClientLink implements AutoCloseable {
         genericRpc(Channels.Core.Options.DEVICE_REMOTE, ioTimeout, lockTimeout);
     }
 
-    public void local(){
+    public void local() {
         local(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
 
@@ -124,7 +132,7 @@ public class Vxi11ClientLink implements AutoCloseable {
         genericRpc(Channels.Core.Options.DEVICE_LOCAL, ioTimeout, lockTimeout);
     }
 
-    public void lock(){
+    public void lock() {
         lock(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
 
@@ -145,6 +153,32 @@ public class Vxi11ClientLink implements AutoCloseable {
         DeviceError response = new DeviceError();
         call(client.abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
         response.getError().checkErrorThrowException();
+    }
+
+    public void enableServiceRequest(boolean enable) {
+        DeviceEnableServiceRequestParams request = new DeviceEnableServiceRequestParams(link, enable, handle);
+        DeviceError response = new DeviceError();
+        call(client.coreChannel, Channels.Core.Options.DEVICE_ENABLE_SRQ, request, response);
+        response.getError().checkErrorThrowException();
+        if (enable) {
+            client.interruptChannel.register(handle, this);
+        } else {
+            client.interruptChannel.unregister(handle);
+        }
+    }
+
+    public void addServiceRequestListener(Vxi11ServiceRequestListener listener) {
+        serviceRequestListeners.add(listener);
+    }
+
+    public void removeServiceRequestListener(Vxi11ServiceRequestListener listener) {
+        serviceRequestListeners.remove(listener);
+    }
+
+    protected void doListener() {
+        for (Vxi11ServiceRequestListener listener : serviceRequestListeners) {
+            listener.action();
+        }
     }
 
     public boolean isClosed() {

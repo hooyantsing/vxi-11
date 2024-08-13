@@ -79,7 +79,7 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    private void closeCoreChannel(){
+    private void closeCoreChannel() {
         try {
             coreChannel.close();
         } catch (OncRpcException e) {
@@ -112,8 +112,9 @@ public class Vxi11Client implements AutoCloseable {
     }
 
     public void openInterruptChannel(int interruptPort) {
-        this.interruptChannel = new Vxi11ClientInterruptServer();
         try {
+            this.interruptChannel = new Vxi11ClientInterruptServer(interruptPort);
+            interruptChannel.run();
             int address = 0;
             byte[] addressBytes = host.getAddress();
             for (byte bytes : addressBytes) {
@@ -132,7 +133,7 @@ public class Vxi11Client implements AutoCloseable {
     public void closeInterruptChannel() {
         if (connectedInterruptChannel()) {
             try {
-                XdrVoid request = new XdrVoid();
+                XdrVoid request = XdrVoid.XDR_VOID;
                 DeviceError response = new DeviceError();
                 coreChannel.call(Channels.Core.Options.DESTROY_INTERRUPT_CHANNEL, request, response);
                 interruptChannel.close();
