@@ -3,6 +3,7 @@ package xyz.hooy.vxi11;
 import org.acplt.oncrpc.OncRpcClient;
 import org.acplt.oncrpc.OncRpcException;
 import org.acplt.oncrpc.OncRpcProtocols;
+import org.acplt.oncrpc.XdrVoid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.rpc.*;
@@ -28,33 +29,12 @@ public class Vxi11Client implements AutoCloseable {
     protected OncRpcClient abortChannel;
 
     protected Vxi11ClientInterruptServer interruptChannel;
-    
+
     private final List<Vxi11ClientLink> links = new ArrayList<>();
 
     public Vxi11Client(InetAddress host, int port) {
         this.host = host;
-        // create core channel
-        try {
-            this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, port, OncRpcProtocols.ONCRPC_TCP);
-        } catch (OncRpcException | IOException e) {
-            throw new Vxi11Exception(e);
-        }
-        // create interrupt channel
-        this.interruptChannel = new Vxi11ClientInterruptServer();
-        try {
-            int address = 0;
-            byte[] addressBytes = host.getAddress();
-            for (byte bytes : addressBytes) {
-                address <<= 8;
-                address |= (bytes & 0xFF);
-            }
-            DeviceRemoteFunction request = new DeviceRemoteFunction(address,9802,Channels.Interrupt.PROGRAM,Channels.Interrupt.PROGRAM);
-            DeviceError response = new DeviceError();
-            coreChannel.call(Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
-            response.getError().checkErrorThrowException();
-        } catch (Exception e) {
-            log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
-        }
+        openCoreChannel(port);
     }
 
     @Override
@@ -65,28 +45,9 @@ public class Vxi11Client implements AutoCloseable {
             }
         }
         links.clear();
-        try {
-            coreChannel.close();
-        } catch (OncRpcException e) {
-            log.warn("Close core channel failed.", e);
-        }
-        if (!connectedAbortChannel()){
-            try {
-                abortChannel.close();
-            } catch (OncRpcException e) {
-                log.warn("Close abort channel failed.", e);
-            }
-        }
-        if (!connectedInterruptChannel()){
-            try {
-                interruptChannel.close();
-            } catch (Exception e) {
-                log.warn("Close interrupt channel failed.", e);
-            }
-        }
-        this.interruptChannel = null;
-        this.abortChannel = null;
-        this.coreChannel = null;
+        closeInterruptChannel();
+        closeAbortChannel();
+        closeCoreChannel();
     }
 
     public Vxi11ClientLink createLink(String device) {
@@ -103,21 +64,46 @@ public class Vxi11Client implements AutoCloseable {
         }
         response.getError().checkErrorThrowException();
         if (!connectedAbortChannel()) {
-            try {
-                this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, response.getAbortPort(), OncRpcProtocols.ONCRPC_TCP);
-            } catch (OncRpcException | IOException e) {
-                log.warn("Link {} failed to establish the abort channel, the instrument may not support it.", response.getLink().getLinkId());
-            }
+            openAbortChannel(response.getAbortPort());
         }
         Vxi11ClientLink link = new Vxi11ClientLink(this, response);
         links.add(link);
         return link;
     }
 
-    public void setTimeout(int timeout) {
-        coreChannel.setTimeout(timeout);
-        if (connectedAbortChannel()) {
-            abortChannel.setTimeout(timeout);
+    private void openCoreChannel(int corePort) {
+        try {
+            this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
+        } catch (OncRpcException | IOException e) {
+            throw new Vxi11Exception(e);
+        }
+    }
+
+    private void closeCoreChannel(){
+        try {
+            coreChannel.close();
+        } catch (OncRpcException e) {
+            log.warn("Close core channel failed.", e);
+        }
+        this.coreChannel = null;
+    }
+
+    private void openAbortChannel(int abortPort) {
+        try {
+            this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
+        } catch (OncRpcException | IOException e) {
+            log.warn("Failed to establish the abort channel, the instrument may not support it.");
+        }
+    }
+
+    private void closeAbortChannel() {
+        if (!connectedAbortChannel()) {
+            try {
+                abortChannel.close();
+            } catch (OncRpcException e) {
+                log.warn("Close abort channel failed.", e);
+            }
+            this.abortChannel = null;
         }
     }
 
@@ -125,7 +111,46 @@ public class Vxi11Client implements AutoCloseable {
         return Objects.nonNull(abortChannel);
     }
 
+    public void openInterruptChannel(int interruptPort) {
+        this.interruptChannel = new Vxi11ClientInterruptServer();
+        try {
+            int address = 0;
+            byte[] addressBytes = host.getAddress();
+            for (byte bytes : addressBytes) {
+                address <<= 8;
+                address |= (bytes & 0xFF);
+            }
+            DeviceRemoteFunction request = new DeviceRemoteFunction(address, interruptPort, Channels.Interrupt.PROGRAM, Channels.Interrupt.PROGRAM);
+            DeviceError response = new DeviceError();
+            coreChannel.call(Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
+            response.getError().checkErrorThrowException();
+        } catch (Exception e) {
+            log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
+        }
+    }
+
+    public void closeInterruptChannel() {
+        if (connectedInterruptChannel()) {
+            try {
+                XdrVoid request = new XdrVoid();
+                DeviceError response = new DeviceError();
+                coreChannel.call(Channels.Core.Options.DESTROY_INTERRUPT_CHANNEL, request, response);
+                interruptChannel.close();
+            } catch (Exception e) {
+                log.warn("Close interrupt channel failed.", e);
+            }
+            this.interruptChannel = null;
+        }
+    }
+
     public boolean connectedInterruptChannel() {
         return Objects.nonNull(interruptChannel);
+    }
+
+    public void setTimeout(int timeout) {
+        coreChannel.setTimeout(timeout);
+        if (connectedAbortChannel()) {
+            abortChannel.setTimeout(timeout);
+        }
     }
 }
