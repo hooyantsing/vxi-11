@@ -18,6 +18,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 public class Vxi11Client implements AutoCloseable {
 
+    private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
+
+    private final static int DEFAULT_LOCK_TIMEOUT = 0;
+
     private static final Logger log = LoggerFactory.getLogger(Vxi11Client.class);
 
     private final int clientId = ThreadLocalRandom.current().nextInt();
@@ -45,7 +49,7 @@ public class Vxi11Client implements AutoCloseable {
     }
 
     public Link createLink(String device) {
-        return createLink(device, 0);
+        return createLink(device, DEFAULT_LOCK_TIMEOUT);
     }
 
     public Link createLink(String device, int lockTimeout) {
@@ -85,6 +89,7 @@ public class Vxi11Client implements AutoCloseable {
 
     private void openAbortChannel(int abortPort) {
         try {
+            closeAbortChannel();
             this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
             abortChannel.setCharacterEncoding(charset);
         } catch (OncRpcException | IOException e) {
@@ -109,9 +114,15 @@ public class Vxi11Client implements AutoCloseable {
 
     private void openInterruptChannel(int interruptPort) {
         try {
+            closeInterruptChannel();
             this.interruptChannel = new InterruptServer(interruptPort);
             interruptChannel.setCharacterEncoding(charset);
             interruptChannel.run();
+        } catch (Exception e) {
+            log.warn("Failed to run the interrupt server\n {}", e.getMessage());
+            return;
+        }
+        try {
             int address = 0;
             byte[] addressBytes = host.getAddress();
             for (byte bytes : addressBytes) {
@@ -124,6 +135,8 @@ public class Vxi11Client implements AutoCloseable {
             response.getError().checkErrorThrowException();
         } catch (Exception e) {
             log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
+            interruptChannel.close();
+            interruptChannel = null;
         }
     }
 
@@ -183,10 +196,6 @@ public class Vxi11Client implements AutoCloseable {
 
     public class Link implements AutoCloseable {
 
-        private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
-
-        private final static int DEFAULT_LOCK_TIMEOUT = 0;
-
         private final DeviceLink link;
 
         private final String handle;
@@ -213,11 +222,11 @@ public class Vxi11Client implements AutoCloseable {
             }
         }
 
-        public int write(byte[] data) {
-            return write(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+        public void write(byte[] data) {
+            write(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
         }
 
-        public int write(byte[] data, int ioTimeout, int lockTimeout) {
+        public void write(byte[] data, int ioTimeout, int lockTimeout) {
             int writeSize = 0;
             while (writeSize < data.length) {
                 byte[] block = new byte[Math.min(data.length - writeSize, blockSize)];
@@ -229,16 +238,15 @@ public class Vxi11Client implements AutoCloseable {
                 response.getError().checkErrorThrowException();
                 writeSize += block.length;
             }
-            return writeSize;
         }
 
-        public int writeString(String data) {
-            return writeString(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+        public void writeString(String data) {
+            writeString(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
         }
 
-        public int writeString(String data, int ioTimeout, int lockTimeout) {
+        public void writeString(String data, int ioTimeout, int lockTimeout) {
             try {
-                return write(data.getBytes(charset), ioTimeout, lockTimeout);
+                write(data.getBytes(charset), ioTimeout, lockTimeout);
             } catch (UnsupportedEncodingException e) {
                 throw new Vxi11Exception(e);
             }
