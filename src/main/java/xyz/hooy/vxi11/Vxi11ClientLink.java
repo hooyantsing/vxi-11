@@ -161,9 +161,9 @@ public class Vxi11ClientLink implements AutoCloseable {
         call(client.coreChannel, Channels.Core.Options.DEVICE_ENABLE_SRQ, request, response);
         response.getError().checkErrorThrowException();
         if (enable) {
-            client.interruptChannel.register(handle, this);
+            client.interruptChannel.registerServiceRequestLinks(handle, this);
         } else {
-            client.interruptChannel.unregister(handle);
+            client.interruptChannel.unregisterServiceRequestLinks(handle);
         }
     }
 
@@ -175,9 +175,9 @@ public class Vxi11ClientLink implements AutoCloseable {
         serviceRequestListeners.remove(listener);
     }
 
-    protected void doListener() {
+    protected void actionListener() {
         for (Vxi11ServiceRequestListener listener : serviceRequestListeners) {
-            listener.action();
+            listener.action(this);
         }
     }
 

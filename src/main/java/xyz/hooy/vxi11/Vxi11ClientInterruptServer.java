@@ -16,17 +16,19 @@ public class Vxi11ClientInterruptServer extends OncRpcServerStub implements OncR
 
     private final Map<String, Vxi11ClientLink> serviceRequestLinks = new HashMap<>();
 
+    private static final int BUFFER_SIZE = Short.MAX_VALUE;
+
     public Vxi11ClientInterruptServer(int port) throws OncRpcException, IOException {
         this(null, port);
     }
 
     public Vxi11ClientInterruptServer(InetAddress bindAddr, int port) throws OncRpcException, IOException {
         info = new OncRpcServerTransportRegistrationInfo[]{
-                new OncRpcServerTransportRegistrationInfo(Channels.Interrupt.PROGRAM, 1)
+                new OncRpcServerTransportRegistrationInfo(Channels.Interrupt.PROGRAM, Channels.Interrupt.VERSION)
         };
         transports = new OncRpcServerTransport[]{
-                new OncRpcUdpServerTransport(this, bindAddr, port, info, 32768),
-                new OncRpcTcpServerTransport(this, bindAddr, port, info, 32768)
+                new OncRpcUdpServerTransport(this, bindAddr, port, info, BUFFER_SIZE),
+                new OncRpcTcpServerTransport(this, bindAddr, port, info, BUFFER_SIZE)
         };
     }
 
@@ -52,18 +54,18 @@ public class Vxi11ClientInterruptServer extends OncRpcServerStub implements OncR
         }
     }
 
-    public void register(String handle, Vxi11ClientLink link) {
+    public void registerServiceRequestLinks(String handle, Vxi11ClientLink link) {
         serviceRequestLinks.put(handle, link);
     }
 
-    public void unregister(String handle) {
+    public void unregisterServiceRequestLinks(String handle) {
         serviceRequestLinks.remove(handle);
     }
 
     private void interruptServiceRequest(DeviceServiceRequestParams request) {
         Vxi11ClientLink link = serviceRequestLinks.get(request.getHandle());
         if (Objects.nonNull(link)) {
-            link.doListener();
+            link.actionListener();
         }
     }
 

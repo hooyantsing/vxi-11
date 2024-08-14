@@ -11,6 +11,7 @@ import xyz.hooy.vxi11.exception.Vxi11Exception;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -22,15 +23,17 @@ public class Vxi11Client implements AutoCloseable {
 
     private final int clientId = ThreadLocalRandom.current().nextInt();
 
+    private final List<Vxi11ClientLink> links = new ArrayList<>();
+
     private final InetAddress host;
+
+    private String charset = StandardCharsets.UTF_8.name();
 
     protected OncRpcClient coreChannel;
 
     protected OncRpcClient abortChannel;
 
     protected Vxi11ClientInterruptServer interruptChannel;
-
-    private final List<Vxi11ClientLink> links = new ArrayList<>();
 
     public Vxi11Client(InetAddress host, int port) {
         this.host = host;
@@ -74,6 +77,7 @@ public class Vxi11Client implements AutoCloseable {
     private void openCoreChannel(int corePort) {
         try {
             this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
+            coreChannel.setCharacterEncoding(charset);
         } catch (OncRpcException | IOException e) {
             throw new Vxi11Exception(e);
         }
@@ -91,6 +95,7 @@ public class Vxi11Client implements AutoCloseable {
     private void openAbortChannel(int abortPort) {
         try {
             this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
+            abortChannel.setCharacterEncoding(charset);
         } catch (OncRpcException | IOException e) {
             log.warn("Failed to establish the abort channel, the instrument may not support it.");
         }
@@ -114,6 +119,7 @@ public class Vxi11Client implements AutoCloseable {
     public void openInterruptChannel(int interruptPort) {
         try {
             this.interruptChannel = new Vxi11ClientInterruptServer(interruptPort);
+            interruptChannel.setCharacterEncoding(charset);
             interruptChannel.run();
             int address = 0;
             byte[] addressBytes = host.getAddress();
@@ -153,5 +159,21 @@ public class Vxi11Client implements AutoCloseable {
         if (connectedAbortChannel()) {
             abortChannel.setTimeout(timeout);
         }
+        // InterruptChannel default timeout
+    }
+
+    public String getCharset() {
+        return charset;
+    }
+
+    public void setCharset(String charset) {
+        coreChannel.setCharacterEncoding(charset);
+        if (connectedAbortChannel()) {
+            abortChannel.setCharacterEncoding(charset);
+        }
+        if (connectedInterruptChannel()) {
+            interruptChannel.setCharacterEncoding(charset);
+        }
+        this.charset = charset;
     }
 }
