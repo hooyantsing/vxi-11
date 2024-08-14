@@ -1,6 +1,7 @@
 package xyz.hooy.vxi11.rpc;
 
 import org.acplt.oncrpc.*;
+import xyz.hooy.vxi11.util.BitUtils;
 
 import java.io.IOException;
 
@@ -38,15 +39,15 @@ public class DeviceReadResponse implements XdrAble {
     }
 
     public boolean isEnd() {
-        return (reason & (1 << END_OFFSET)) != 0;
+        return BitUtils.isBit(reason,END_OFFSET);
     }
 
     public boolean isTerminationCharacter() {
-        return (reason & (1 << TERMINATION_CHARACTER_OFFSET)) != 0;
+        return BitUtils.isBit(reason,TERMINATION_CHARACTER_OFFSET);
     }
 
     public boolean isRequestCount() {
-        return (reason & (1 << REQUESTED_COUNT_OFFSET)) != 0;
+        return BitUtils.isBit(reason,REQUESTED_COUNT_OFFSET);
     }
 
     public boolean noReason() {

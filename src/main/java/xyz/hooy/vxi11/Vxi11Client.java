@@ -63,7 +63,7 @@ public class Vxi11Client implements AutoCloseable {
         if (!connectedAbortChannel()) {
             openAbortChannel(response.getAbortPort());
         }
-        Link link = new Link(response);
+        Link link = new Link(response.getLink(), response.getMaxReceiveSize());
         links.add(link);
         return link;
     }
@@ -123,13 +123,7 @@ public class Vxi11Client implements AutoCloseable {
             return;
         }
         try {
-            int address = 0;
-            byte[] addressBytes = host.getAddress();
-            for (byte bytes : addressBytes) {
-                address <<= 8;
-                address |= (bytes & 0xFF);
-            }
-            DeviceRemoteFunction request = new DeviceRemoteFunction(address, interruptPort, Channels.Interrupt.PROGRAM, Channels.Interrupt.PROGRAM);
+            DeviceRemoteFunction request = new DeviceRemoteFunction(addressInt(host), interruptPort, Channels.Interrupt.PROGRAM, Channels.Interrupt.PROGRAM);
             DeviceError response = new DeviceError();
             coreChannel.call(Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
             response.getError().checkErrorThrowException();
@@ -194,6 +188,16 @@ public class Vxi11Client implements AutoCloseable {
         closeCoreChannel();
     }
 
+    private int addressInt(InetAddress host) {
+        int address = 0;
+        byte[] addressBytes = host.getAddress();
+        for (byte bytes : addressBytes) {
+            address <<= 8;
+            address |= (bytes & 0xFF);
+        }
+        return address;
+    }
+
     public class Link implements AutoCloseable {
 
         private final String handle = String.valueOf(hashCode());
@@ -206,9 +210,9 @@ public class Vxi11Client implements AutoCloseable {
 
         private final Set<Vxi11ServiceRequestListener> serviceRequestListeners = new HashSet<>();
 
-        protected Link(CreateLinkResponse response) {
-            this.link = response.getLink();
-            this.blockSize = response.getMaxReceiveSize();
+        protected Link(DeviceLink link, int blockSize) {
+            this.link = link;
+            this.blockSize = blockSize;
         }
 
         @Override
@@ -436,7 +440,7 @@ public class Vxi11Client implements AutoCloseable {
         }
 
         public void dispatchOncRpcCall(OncRpcCallInformation call, int program, int version, int procedure) throws OncRpcException, IOException {
-            if (version == 1) {
+            if (version == Channels.Interrupt.VERSION) {
                 switch (procedure) {
                     case 0:
                         call.retrieveCall(XdrVoid.XDR_VOID);

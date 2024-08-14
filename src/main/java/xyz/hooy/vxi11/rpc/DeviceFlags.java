@@ -1,6 +1,7 @@
 package xyz.hooy.vxi11.rpc;
 
 import org.acplt.oncrpc.*;
+import xyz.hooy.vxi11.util.BitUtils;
 
 import java.io.IOException;
 
@@ -32,33 +33,29 @@ public class DeviceFlags implements XdrAble {
     }
 
     public boolean isTerminationCharacter() {
-        return flagBits >> TERMINATION_CHARACTER_OFFSET == 1;
+        return BitUtils.isBit(flagBits, TERMINATION_CHARACTER_OFFSET);
     }
 
     public boolean isEnd() {
-        return flagBits >> END_OFFSET == 1;
+        return BitUtils.isBit(flagBits, END_OFFSET);
     }
 
     public boolean isWaitLock() {
-        return flagBits >> WAIT_LOCK_OFFSET == 1;
+        return BitUtils.isBit(flagBits, WAIT_LOCK_OFFSET);
     }
 
     public DeviceFlags enableTerminationCharacter(boolean enable) {
-        offsetBit(TERMINATION_CHARACTER_OFFSET, enable);
+        this.flagBits = BitUtils.setBit(flagBits, TERMINATION_CHARACTER_OFFSET, enable);
         return this;
     }
 
     public DeviceFlags enableEnd(boolean enable) {
-        offsetBit(END_OFFSET, enable);
+        this.flagBits = BitUtils.setBit(flagBits, END_OFFSET, enable);
         return this;
     }
 
     public DeviceFlags enableWaitLock(boolean enable) {
-        offsetBit(WAIT_LOCK_OFFSET, enable);
+        this.flagBits = BitUtils.setBit(flagBits, WAIT_LOCK_OFFSET, enable);
         return this;
-    }
-
-    private void offsetBit(int offset, boolean enable) {
-        this.flagBits = enable ? 1 << offset | flagBits : ~(1 << offset) & flagBits;
     }
 }
