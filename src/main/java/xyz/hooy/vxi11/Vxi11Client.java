@@ -14,7 +14,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 
 public class Vxi11Client implements AutoCloseable {
 
@@ -22,9 +21,9 @@ public class Vxi11Client implements AutoCloseable {
 
     private final static int DEFAULT_LOCK_TIMEOUT = 0;
 
-    private static final Logger log = LoggerFactory.getLogger(Vxi11Client.class);
+    private final static Logger log = LoggerFactory.getLogger(Vxi11Client.class);
 
-    private final int clientId = ThreadLocalRandom.current().nextInt();
+    private final int clientId = hashCode();
 
     private final List<Link> links = new ArrayList<>();
 
@@ -115,9 +114,10 @@ public class Vxi11Client implements AutoCloseable {
     private void openInterruptChannel(int interruptPort) {
         try {
             closeInterruptChannel();
-            this.interruptChannel = new InterruptServer(interruptPort);
+            InterruptServer interruptServer = new InterruptServer(interruptPort);
             interruptChannel.setCharacterEncoding(charset);
             interruptChannel.run();
+            this.interruptChannel = interruptServer;
         } catch (Exception e) {
             log.warn("Failed to run the interrupt server\n {}", e.getMessage());
             return;
@@ -196,9 +196,9 @@ public class Vxi11Client implements AutoCloseable {
 
     public class Link implements AutoCloseable {
 
-        private final DeviceLink link;
+        private final String handle = String.valueOf(hashCode());
 
-        private final String handle;
+        private final DeviceLink link;
 
         private final int blockSize;
 
@@ -208,7 +208,6 @@ public class Vxi11Client implements AutoCloseable {
 
         protected Link(CreateLinkResponse response) {
             this.link = response.getLink();
-            this.handle = "TODO";
             this.blockSize = response.getMaxReceiveSize();
         }
 
@@ -355,9 +354,6 @@ public class Vxi11Client implements AutoCloseable {
         }
 
         public void abort() {
-            if (!connectedAbortChannel()) {
-                throw new UnsupportedOperationException("No channel established, method not supported.");
-            }
             DeviceError response = new DeviceError();
             call(abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
             response.getError().checkErrorThrowException();
@@ -368,9 +364,6 @@ public class Vxi11Client implements AutoCloseable {
         }
 
         public void enableServiceRequest(boolean enable) {
-            if (!connectedInterruptChannel()) {
-                throw new UnsupportedOperationException("No channel established, method not supported.");
-            }
             DeviceEnableServiceRequestParams request = new DeviceEnableServiceRequestParams(link, enable, handle);
             DeviceError response = new DeviceError();
             call(coreChannel, Channels.Core.Options.DEVICE_ENABLE_SRQ, request, response);
@@ -409,6 +402,9 @@ public class Vxi11Client implements AutoCloseable {
         }
 
         private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
+            if (Objects.isNull(channel)) {
+                throw new UnsupportedOperationException("No channel established, method not supported.");
+            }
             try {
                 channel.call(procedureNumber, params, result);
             } catch (OncRpcTimeoutException e) {
