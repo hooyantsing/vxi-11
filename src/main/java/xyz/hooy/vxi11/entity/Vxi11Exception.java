@@ -1,4 +1,4 @@
-package xyz.hooy.vxi11.exception;
+package xyz.hooy.vxi11.entity;
 
 import xyz.hooy.vxi11.rpc.ErrorCode;
 

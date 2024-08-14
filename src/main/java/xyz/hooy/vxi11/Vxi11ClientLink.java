@@ -6,8 +6,8 @@ import org.acplt.oncrpc.OncRpcTimeoutException;
 import org.acplt.oncrpc.XdrAble;
 import xyz.hooy.vxi11.rpc.*;
 import xyz.hooy.vxi11.entity.*;
-import xyz.hooy.vxi11.exception.*;
 
+import java.io.UnsupportedEncodingException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -65,6 +65,26 @@ public class Vxi11ClientLink implements AutoCloseable {
         return writeSize;
     }
 
+    public int writeString(String data) {
+        return writeString(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public int writeString(String data, int ioTimeout, int lockTimeout) {
+        try {
+            return write(data.getBytes(client.charset), ioTimeout, lockTimeout);
+        } catch (UnsupportedEncodingException e) {
+            throw new Vxi11Exception(e);
+        }
+    }
+
+    public byte[] read(char terminationCharacter) {
+        return read(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public byte[] read(char terminationCharacter, int ioTimeout, int lockTimeout) {
+        return read((byte) terminationCharacter, ioTimeout, lockTimeout);
+    }
+
     public byte[] read(byte terminationCharacter) {
         return read(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
@@ -87,11 +107,24 @@ public class Vxi11ClientLink implements AutoCloseable {
         return buffer.toByteArray();
     }
 
-    public byte readStb() {
-        return readStb(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    public String readString(char terminationCharacter) {
+        return readString(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
     }
 
-    public byte readStb(int ioTimeout, int lockTimeout) {
+    public String readString(char terminationCharacter, int ioTimeout, int lockTimeout) {
+        byte[] read = read(terminationCharacter, ioTimeout, lockTimeout);
+        try {
+            return new String(read, client.charset);
+        } catch (UnsupportedEncodingException e) {
+            throw new Vxi11Exception(e);
+        }
+    }
+
+    public byte readStatusByte() {
+        return readStatusByte(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+    }
+
+    public byte readStatusByte(int ioTimeout, int lockTimeout) {
         DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
         DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
         DeviceReadStbResponse response = new DeviceReadStbResponse();
@@ -153,6 +186,10 @@ public class Vxi11ClientLink implements AutoCloseable {
         DeviceError response = new DeviceError();
         call(client.abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
         response.getError().checkErrorThrowException();
+    }
+
+    public void enableServiceRequest() {
+        enableServiceRequest(true);
     }
 
     public void enableServiceRequest(boolean enable) {

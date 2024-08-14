@@ -7,7 +7,7 @@ import org.acplt.oncrpc.XdrVoid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.rpc.*;
-import xyz.hooy.vxi11.exception.Vxi11Exception;
+import xyz.hooy.vxi11.entity.Vxi11Exception;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -27,7 +27,7 @@ public class Vxi11Client implements AutoCloseable {
 
     private final InetAddress host;
 
-    private String charset = StandardCharsets.UTF_8.name();
+    protected String charset = StandardCharsets.UTF_8.name();
 
     protected OncRpcClient coreChannel;
 
@@ -35,22 +35,14 @@ public class Vxi11Client implements AutoCloseable {
 
     protected Vxi11ClientInterruptServer interruptChannel;
 
-    public Vxi11Client(InetAddress host, int port) {
+    public Vxi11Client(InetAddress host, int corePort) {
         this.host = host;
-        openCoreChannel(port);
+        openCoreChannel(corePort);
     }
 
-    @Override
-    public void close() {
-        for (Vxi11ClientLink link : links) {
-            if (!link.isClosed()) {
-                link.close();
-            }
-        }
-        links.clear();
-        closeInterruptChannel();
-        closeAbortChannel();
-        closeCoreChannel();
+    public Vxi11Client(InetAddress host, int corePort, int interruptPort) {
+        this(host, corePort);
+        openInterruptChannel(interruptPort);
     }
 
     public Vxi11ClientLink createLink(String device) {
@@ -116,7 +108,7 @@ public class Vxi11Client implements AutoCloseable {
         return Objects.nonNull(abortChannel);
     }
 
-    public void openInterruptChannel(int interruptPort) {
+    private void openInterruptChannel(int interruptPort) {
         try {
             this.interruptChannel = new Vxi11ClientInterruptServer(interruptPort);
             interruptChannel.setCharacterEncoding(charset);
@@ -136,7 +128,7 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    public void closeInterruptChannel() {
+    private void closeInterruptChannel() {
         if (connectedInterruptChannel()) {
             try {
                 XdrVoid request = XdrVoid.XDR_VOID;
@@ -175,5 +167,18 @@ public class Vxi11Client implements AutoCloseable {
             interruptChannel.setCharacterEncoding(charset);
         }
         this.charset = charset;
+    }
+
+    @Override
+    public void close() {
+        for (Vxi11ClientLink link : links) {
+            if (!link.isClosed()) {
+                link.close();
+            }
+        }
+        links.clear();
+        closeInterruptChannel();
+        closeAbortChannel();
+        closeCoreChannel();
     }
 }
