@@ -5,6 +5,7 @@ import org.acplt.oncrpc.server.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.entity.ByteArrayBuffer;
+import xyz.hooy.vxi11.entity.StatusByte;
 import xyz.hooy.vxi11.entity.Vxi11ServiceRequestListener;
 import xyz.hooy.vxi11.rpc.*;
 import xyz.hooy.vxi11.entity.Vxi11Exception;
@@ -15,7 +16,7 @@ import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-public class Vxi11Client implements AutoCloseable {
+public class Vxi11Client {
 
     private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
 
@@ -28,6 +29,10 @@ public class Vxi11Client implements AutoCloseable {
     private final List<Link> links = new ArrayList<>();
 
     private final InetAddress host;
+
+    private final int corePort;
+
+    private final int interruptPort;
 
     private String charset = StandardCharsets.UTF_8.name();
 
@@ -43,8 +48,8 @@ public class Vxi11Client implements AutoCloseable {
 
     public Vxi11Client(InetAddress host, int corePort, int interruptPort) {
         this.host = host;
-        openCoreChannel(corePort);
-        openInterruptChannel(interruptPort);
+        this.corePort = corePort;
+        this.interruptPort = interruptPort;
     }
 
     public Link createLink(String device) {
@@ -52,23 +57,33 @@ public class Vxi11Client implements AutoCloseable {
     }
 
     public Link createLink(String device, int lockTimeout) {
+        if (!connectedCoreChannel()) {
+            openCoreChannel();
+        }
         CreateLinkParams request = new CreateLinkParams(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
             coreChannel.call(Channels.Core.Options.CREATE_LINK, request, response);
-        } catch (OncRpcException e) {
+            response.getError().checkErrorThrowException();
+        } catch (Vxi11Exception e) {
+            emptyLinksCloseAllChannel();
+            throw e;
+        } catch (Exception e) {
+            emptyLinksCloseAllChannel();
             throw new Vxi11Exception(e);
         }
-        response.getError().checkErrorThrowException();
         if (!connectedAbortChannel()) {
             openAbortChannel(response.getAbortPort());
+        }
+        if (!connectedInterruptChannel()) {
+            openInterruptChannel();
         }
         Link link = new Link(response.getLink(), response.getMaxReceiveSize());
         links.add(link);
         return link;
     }
 
-    private void openCoreChannel(int corePort) {
+    private void openCoreChannel() {
         try {
             this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
             coreChannel.setCharacterEncoding(charset);
@@ -77,18 +92,8 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    private void closeCoreChannel() {
-        try {
-            coreChannel.close();
-        } catch (OncRpcException e) {
-            log.warn("Close core channel failed.", e);
-        }
-        this.coreChannel = null;
-    }
-
     private void openAbortChannel(int abortPort) {
         try {
-            closeAbortChannel();
             this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
             abortChannel.setCharacterEncoding(charset);
         } catch (OncRpcException | IOException e) {
@@ -96,24 +101,8 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
-    private void closeAbortChannel() {
-        if (!connectedAbortChannel()) {
-            try {
-                abortChannel.close();
-            } catch (OncRpcException e) {
-                log.warn("Close abort channel failed.", e);
-            }
-            this.abortChannel = null;
-        }
-    }
-
-    public boolean connectedAbortChannel() {
-        return Objects.nonNull(abortChannel);
-    }
-
-    private void openInterruptChannel(int interruptPort) {
+    private void openInterruptChannel() {
         try {
-            closeInterruptChannel();
             InterruptServer interruptServer = new InterruptServer(interruptPort);
             interruptChannel.setCharacterEncoding(charset);
             interruptChannel.run();
@@ -134,6 +123,26 @@ public class Vxi11Client implements AutoCloseable {
         }
     }
 
+    private void closeCoreChannel() {
+        try {
+            coreChannel.close();
+        } catch (OncRpcException e) {
+            log.warn("Close core channel failed.", e);
+        }
+        this.coreChannel = null;
+    }
+
+    private void closeAbortChannel() {
+        if (!connectedAbortChannel()) {
+            try {
+                abortChannel.close();
+            } catch (OncRpcException e) {
+                log.warn("Close abort channel failed.", e);
+            }
+            this.abortChannel = null;
+        }
+    }
+
     private void closeInterruptChannel() {
         if (connectedInterruptChannel()) {
             try {
@@ -146,6 +155,22 @@ public class Vxi11Client implements AutoCloseable {
             }
             this.interruptChannel = null;
         }
+    }
+
+    private void emptyLinksCloseAllChannel() {
+        if (links.stream().allMatch(Link::isClosed)) {
+            closeInterruptChannel();
+            closeAbortChannel();
+            closeCoreChannel();
+        }
+    }
+
+    public boolean connectedCoreChannel() {
+        return Objects.nonNull(coreChannel);
+    }
+
+    public boolean connectedAbortChannel() {
+        return Objects.nonNull(abortChannel);
     }
 
     public boolean connectedInterruptChannel() {
@@ -173,19 +198,6 @@ public class Vxi11Client implements AutoCloseable {
             interruptChannel.setCharacterEncoding(charset);
         }
         this.charset = charset;
-    }
-
-    @Override
-    public void close() {
-        for (Link link : links) {
-            if (!link.isClosed()) {
-                link.close();
-            }
-        }
-        links.clear();
-        closeInterruptChannel();
-        closeAbortChannel();
-        closeCoreChannel();
     }
 
     private int addressInt(InetAddress host) {
@@ -221,6 +233,7 @@ public class Vxi11Client implements AutoCloseable {
                 DeviceError response = new DeviceError();
                 call(coreChannel, Channels.Core.Options.DESTROY_LINK, link, response);
                 response.getError().checkErrorThrowException();
+                emptyLinksCloseAllChannel();
                 this.closed = true;
             }
         }
@@ -298,17 +311,17 @@ public class Vxi11Client implements AutoCloseable {
             }
         }
 
-        public byte readStatusByte() {
+        public StatusByte readStatusByte() {
             return readStatusByte(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
         }
 
-        public byte readStatusByte(int ioTimeout, int lockTimeout) {
+        public StatusByte readStatusByte(int ioTimeout, int lockTimeout) {
             DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
             DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
             DeviceReadStbResponse response = new DeviceReadStbResponse();
             call(coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response);
             response.getError().checkErrorThrowException();
-            return response.getStb();
+            return new StatusByte(response.getStb());
         }
 
         public void trigger() {
