@@ -87,7 +87,7 @@ public class Vxi11Client {
         try {
             this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
             coreChannel.setCharacterEncoding(charset);
-        } catch (OncRpcException | IOException e) {
+        } catch (Exception e) {
             throw new Vxi11Exception(e);
         }
     }
@@ -96,7 +96,7 @@ public class Vxi11Client {
         try {
             this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
             abortChannel.setCharacterEncoding(charset);
-        } catch (OncRpcException | IOException e) {
+        } catch (Exception e) {
             log.warn("Failed to establish the abort channel, the instrument may not support it.");
         }
     }
@@ -108,7 +108,7 @@ public class Vxi11Client {
             interruptChannel.run();
             this.interruptChannel = interruptServer;
         } catch (Exception e) {
-            log.warn("Failed to run the interrupt server\n {}", e.getMessage());
+            log.warn("Failed to run the interrupt server.\n {}", e.getMessage());
             return;
         }
         try {
@@ -124,19 +124,21 @@ public class Vxi11Client {
     }
 
     private void closeCoreChannel() {
-        try {
-            coreChannel.close();
-        } catch (OncRpcException e) {
-            log.warn("Close core channel failed.", e);
+        if (connectedCoreChannel()) {
+            try {
+                coreChannel.close();
+            } catch (Exception e) {
+                log.warn("Close core channel failed.", e);
+            }
+            this.coreChannel = null;
         }
-        this.coreChannel = null;
     }
 
     private void closeAbortChannel() {
-        if (!connectedAbortChannel()) {
+        if (connectedAbortChannel()) {
             try {
                 abortChannel.close();
-            } catch (OncRpcException e) {
+            } catch (Exception e) {
                 log.warn("Close abort channel failed.", e);
             }
             this.abortChannel = null;
@@ -178,7 +180,9 @@ public class Vxi11Client {
     }
 
     public void setTimeout(int timeout) {
-        coreChannel.setTimeout(timeout);
+        if (connectedCoreChannel()) {
+            coreChannel.setTimeout(timeout);
+        }
         if (connectedAbortChannel()) {
             abortChannel.setTimeout(timeout);
         }
@@ -190,7 +194,9 @@ public class Vxi11Client {
     }
 
     public void setCharset(String charset) {
-        coreChannel.setCharacterEncoding(charset);
+        if (connectedCoreChannel()) {
+            coreChannel.setCharacterEncoding(charset);
+        }
         if (connectedAbortChannel()) {
             abortChannel.setCharacterEncoding(charset);
         }
