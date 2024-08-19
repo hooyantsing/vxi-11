@@ -18,7 +18,7 @@ public final class Vxi11VisaManager {
     public static Vxi11Client.Link newSession(String resource) throws UnknownHostException {
         Matcher matcher = pattern.matcher(resource);
         if (!matcher.matches()) {
-            throw new IllegalArgumentException("");
+            throw new IllegalArgumentException("Invalid visa resource format. Please enter an visa resource in the format: TCPIP<board>::<host>::<instrument>::INSTR");
         }
         String host = matcher.group("host");
         String instrument = matcher.group("instrument");

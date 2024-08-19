@@ -5,25 +5,25 @@ public final class BitUtils {
     private BitUtils() {
     }
 
-    public static boolean isBit(int byte4, int offset) {
-        checkIntegerOffset(offset);
-        return (byte4 & 1 << offset) != 0;
+    public static boolean isBit(int byte4, int position) {
+        checkIntegerOffset(position);
+        return (byte4 & 1 << position) != 0;
     }
 
-    public static int setBit(int byte4, int offset, boolean enable) {
-        checkIntegerOffset(offset);
-        return enable ? 1 << offset | byte4 : ~(1 << offset) & byte4;
+    public static int setBit(int byte4, int position, boolean enable) {
+        checkIntegerOffset(position);
+        return enable ? 1 << position | byte4 : ~(1 << position) & byte4;
     }
 
-    public static void checkByteOffset(int offset) {
-        if (offset < 0 || offset > 7) {
-            throw new IllegalArgumentException();
+    public static void checkByteOffset(int position) {
+        if (position < 0 || position > 7) {
+            throw new IllegalArgumentException("Bit position out of range (0-7).");
         }
     }
 
-    public static void checkIntegerOffset(int offset) {
-        if (offset < 0 || offset > 31) {
-            throw new IllegalArgumentException();
+    public static void checkIntegerOffset(int position) {
+        if (position < 0 || position > 31) {
+            throw new IllegalArgumentException("Bit position out of range (0-31).");
         }
     }
 }

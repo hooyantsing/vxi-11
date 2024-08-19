@@ -7,8 +7,8 @@ import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.entity.ByteArrayBuffer;
 import xyz.hooy.vxi11.entity.StatusByte;
 import xyz.hooy.vxi11.entity.Vxi11ServiceRequestListener;
+import xyz.hooy.vxi11.exception.Vxi11ClientException;
 import xyz.hooy.vxi11.rpc.*;
-import xyz.hooy.vxi11.entity.Vxi11Exception;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -35,6 +35,8 @@ public class Vxi11Client {
     private final int interruptPort;
 
     private String charset = StandardCharsets.UTF_8.name();
+
+    private int timeout = 3000;
 
     private OncRpcClient coreChannel;
 
@@ -63,14 +65,11 @@ public class Vxi11Client {
         CreateLinkParams request = new CreateLinkParams(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
         CreateLinkResponse response = new CreateLinkResponse();
         try {
-            coreChannel.call(Channels.Core.Options.CREATE_LINK, request, response);
+            call(coreChannel, Channels.Core.Options.CREATE_LINK, request, response);
             response.getError().checkErrorThrowException();
-        } catch (Vxi11Exception e) {
-            emptyLinksCloseAllChannel();
-            throw e;
         } catch (Exception e) {
             emptyLinksCloseAllChannel();
-            throw new Vxi11Exception(e);
+            throw e;
         }
         if (!connectedAbortChannel()) {
             openAbortChannel(response.getAbortPort());
@@ -86,15 +85,17 @@ public class Vxi11Client {
     private void openCoreChannel() {
         try {
             this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
+            coreChannel.setTimeout(timeout);
             coreChannel.setCharacterEncoding(charset);
         } catch (Exception e) {
-            throw new Vxi11Exception(e);
+            throw new Vxi11ClientException(e);
         }
     }
 
     private void openAbortChannel(int abortPort) {
         try {
             this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
+            abortChannel.setTimeout(timeout);
             abortChannel.setCharacterEncoding(charset);
         } catch (Exception e) {
             log.warn("Failed to establish the abort channel, the instrument may not support it.");
@@ -114,7 +115,7 @@ public class Vxi11Client {
         try {
             DeviceRemoteFunction request = new DeviceRemoteFunction(addressInt(host), interruptPort, Channels.Interrupt.PROGRAM, Channels.Interrupt.PROGRAM);
             DeviceError response = new DeviceError();
-            coreChannel.call(Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
+            call(coreChannel, Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
             response.getError().checkErrorThrowException();
         } catch (Exception e) {
             log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
@@ -150,7 +151,7 @@ public class Vxi11Client {
             try {
                 XdrVoid request = XdrVoid.XDR_VOID;
                 DeviceError response = new DeviceError();
-                coreChannel.call(Channels.Core.Options.DESTROY_INTERRUPT_CHANNEL, request, response);
+                call(coreChannel, Channels.Core.Options.DESTROY_INTERRUPT_CHANNEL, request, response);
                 interruptChannel.close();
             } catch (Exception e) {
                 log.warn("Close interrupt channel failed.", e);
@@ -179,6 +180,10 @@ public class Vxi11Client {
         return Objects.nonNull(interruptChannel);
     }
 
+    public int getTimeout() {
+        return timeout;
+    }
+
     public void setTimeout(int timeout) {
         if (connectedCoreChannel()) {
             coreChannel.setTimeout(timeout);
@@ -187,6 +192,7 @@ public class Vxi11Client {
             abortChannel.setTimeout(timeout);
         }
         // InterruptChannel default timeout
+        this.timeout = timeout;
     }
 
     public String getCharset() {
@@ -204,6 +210,17 @@ public class Vxi11Client {
             interruptChannel.setCharacterEncoding(charset);
         }
         this.charset = charset;
+    }
+
+    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
+        if (Objects.isNull(channel)) {
+            throw new IllegalArgumentException("No channel established, method not supported.");
+        }
+        try {
+            channel.call(procedureNumber, params, result);
+        } catch (Exception e) {
+            throw new Vxi11ClientException(e);
+        }
     }
 
     private int addressInt(InetAddress host) {
@@ -239,8 +256,9 @@ public class Vxi11Client {
                 DeviceError response = new DeviceError();
                 call(coreChannel, Channels.Core.Options.DESTROY_LINK, link, response);
                 response.getError().checkErrorThrowException();
-                emptyLinksCloseAllChannel();
+                links.remove(this);
                 this.closed = true;
+                emptyLinksCloseAllChannel();
             }
         }
 
@@ -270,7 +288,7 @@ public class Vxi11Client {
             try {
                 write(data.getBytes(charset), ioTimeout, lockTimeout);
             } catch (UnsupportedEncodingException e) {
-                throw new Vxi11Exception(e);
+                throw new Vxi11ClientException(e);
             }
         }
 
@@ -313,7 +331,7 @@ public class Vxi11Client {
             try {
                 return new String(read, charset);
             } catch (UnsupportedEncodingException e) {
-                throw new Vxi11Exception(e);
+                throw new Vxi11ClientException(e);
             }
         }
 
@@ -422,19 +440,6 @@ public class Vxi11Client {
             DeviceError response = new DeviceError();
             call(coreChannel, options, request, response);
             response.getError().checkErrorThrowException();
-        }
-
-        private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
-            if (Objects.isNull(channel)) {
-                throw new UnsupportedOperationException("No channel established, method not supported.");
-            }
-            try {
-                channel.call(procedureNumber, params, result);
-            } catch (OncRpcTimeoutException e) {
-                throw new Vxi11Exception(ErrorCode.IO_TIMEOUT);
-            } catch (OncRpcException e) {
-                throw new Vxi11Exception(e);
-            }
         }
     }
 

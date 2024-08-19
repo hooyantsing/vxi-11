@@ -1,7 +1,7 @@
 package xyz.hooy.vxi11.rpc;
 
 import org.acplt.oncrpc.*;
-import xyz.hooy.vxi11.entity.Vxi11Exception;
+import xyz.hooy.vxi11.exception.Vxi11ServerException;
 
 import java.io.IOException;
 
@@ -29,7 +29,7 @@ public class DeviceErrorCode implements XdrAble {
 
     public void checkErrorThrowException() {
         if (errorId != ErrorCode.NO_ERROR) {
-            throw new Vxi11Exception(errorId);
+            throw new Vxi11ServerException(errorId);
         }
     }
 }
