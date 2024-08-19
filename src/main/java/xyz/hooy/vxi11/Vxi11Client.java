@@ -33,9 +33,9 @@ public class Vxi11Client {
     private String charset = StandardCharsets.UTF_8.name();
 
     private int timeout = 3000;
-    
+
     private int ioTimeout = 0; // 0: not block
-    
+
     private int lockTimeout = 0;
 
     private OncRpcClient coreChannel;
@@ -441,8 +441,9 @@ public class Vxi11Client {
         }
 
         protected void actionListener() {
+            StatusByte statusByte = readStatusByte();
             for (Vxi11ServiceRequestListener listener : serviceRequestListeners) {
-                listener.action();
+                listener.action(statusByte);
             }
         }
 

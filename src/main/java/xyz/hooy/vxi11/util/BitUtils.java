@@ -5,6 +5,11 @@ public final class BitUtils {
     private BitUtils() {
     }
 
+    public static boolean isBit(byte byte1, int position) {
+        checkByteOffset(position);
+        return (byte1 & 1 << position) != 0;
+    }
+
     public static boolean isBit(int byte4, int position) {
         checkIntegerOffset(position);
         return (byte4 & 1 << position) != 0;
