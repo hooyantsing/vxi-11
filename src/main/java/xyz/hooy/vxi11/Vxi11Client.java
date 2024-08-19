@@ -18,10 +18,6 @@ import java.util.*;
 
 public class Vxi11Client {
 
-    private final static int DEFAULT_IO_TIMEOUT = 0; // Not block
-
-    private final static int DEFAULT_LOCK_TIMEOUT = 0;
-
     private final static Logger log = LoggerFactory.getLogger(Vxi11Client.class);
 
     private final int clientId = hashCode();
@@ -37,6 +33,10 @@ public class Vxi11Client {
     private String charset = StandardCharsets.UTF_8.name();
 
     private int timeout = 3000;
+    
+    private int ioTimeout = 0; // 0: not block
+    
+    private int lockTimeout = 0;
 
     private OncRpcClient coreChannel;
 
@@ -55,7 +55,7 @@ public class Vxi11Client {
     }
 
     public Link createLink(String device) {
-        return createLink(device, DEFAULT_LOCK_TIMEOUT);
+        return createLink(device, lockTimeout);
     }
 
     public Link createLink(String device, int lockTimeout) {
@@ -195,6 +195,22 @@ public class Vxi11Client {
         this.timeout = timeout;
     }
 
+    public int getIoTimeout() {
+        return ioTimeout;
+    }
+
+    public void setIoTimeout(int ioTimeout) {
+        this.ioTimeout = ioTimeout;
+    }
+
+    public int getLockTimeout() {
+        return lockTimeout;
+    }
+
+    public void setLockTimeout(int lockTimeout) {
+        this.lockTimeout = lockTimeout;
+    }
+
     public String getCharset() {
         return charset;
     }
@@ -263,7 +279,7 @@ public class Vxi11Client {
         }
 
         public void write(byte[] data) {
-            write(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            write(data, ioTimeout, lockTimeout);
         }
 
         public void write(byte[] data, int ioTimeout, int lockTimeout) {
@@ -272,7 +288,7 @@ public class Vxi11Client {
                 byte[] block = new byte[Math.min(data.length - writeSize, blockSize)];
                 System.arraycopy(data, writeSize, block, 0, block.length);
                 DeviceFlags deviceFlags = new DeviceFlags().enableEnd(writeSize + blockSize >= data.length).enableWaitLock(lockTimeout > 0);
-                DeviceWriteParams request = new DeviceWriteParams(link, block, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
+                DeviceWriteParams request = new DeviceWriteParams(link, block, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
                 DeviceWriteResponse response = new DeviceWriteResponse();
                 call(coreChannel, Channels.Core.Options.DEVICE_WRITE, request, response);
                 response.getError().checkErrorThrowException();
@@ -281,7 +297,7 @@ public class Vxi11Client {
         }
 
         public void writeString(String data) {
-            writeString(data, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            writeString(data, ioTimeout, lockTimeout);
         }
 
         public void writeString(String data, int ioTimeout, int lockTimeout) {
@@ -293,7 +309,7 @@ public class Vxi11Client {
         }
 
         public byte[] read(char terminationCharacter) {
-            return read(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            return read(terminationCharacter, ioTimeout, lockTimeout);
         }
 
         public byte[] read(char terminationCharacter, int ioTimeout, int lockTimeout) {
@@ -301,7 +317,7 @@ public class Vxi11Client {
         }
 
         public byte[] read(byte terminationCharacter) {
-            return read(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            return read(terminationCharacter, ioTimeout, lockTimeout);
         }
 
         public byte[] read(byte terminationCharacter, int ioTimeout, int lockTimeout) {
@@ -310,7 +326,7 @@ public class Vxi11Client {
             READ_TERMINATION:
             do {
                 DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(true).enableWaitLock(lockTimeout > 0);
-                DeviceReadParams request = new DeviceReadParams(link, blockSize, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), terminationCharacter, deviceFlags);
+                DeviceReadParams request = new DeviceReadParams(link, blockSize, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), terminationCharacter, deviceFlags);
                 response = new DeviceReadResponse();
                 call(coreChannel, Channels.Core.Options.DEVICE_READ, request, response);
                 response.getError().checkErrorThrowException();
@@ -323,7 +339,7 @@ public class Vxi11Client {
         }
 
         public String readString(char terminationCharacter) {
-            return readString(terminationCharacter, DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            return readString(terminationCharacter, ioTimeout, lockTimeout);
         }
 
         public String readString(char terminationCharacter, int ioTimeout, int lockTimeout) {
@@ -336,12 +352,12 @@ public class Vxi11Client {
         }
 
         public StatusByte readStatusByte() {
-            return readStatusByte(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            return readStatusByte(ioTimeout, lockTimeout);
         }
 
         public StatusByte readStatusByte(int ioTimeout, int lockTimeout) {
             DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
-            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
+            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
             DeviceReadStbResponse response = new DeviceReadStbResponse();
             call(coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response);
             response.getError().checkErrorThrowException();
@@ -349,7 +365,7 @@ public class Vxi11Client {
         }
 
         public void trigger() {
-            trigger(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            trigger(ioTimeout, lockTimeout);
         }
 
         public void trigger(int ioTimeout, int lockTimeout) {
@@ -357,7 +373,7 @@ public class Vxi11Client {
         }
 
         public void clear() {
-            clear(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            clear(ioTimeout, lockTimeout);
         }
 
         public void clear(int ioTimeout, int lockTimeout) {
@@ -365,7 +381,7 @@ public class Vxi11Client {
         }
 
         public void remote() {
-            remote(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            remote(ioTimeout, lockTimeout);
         }
 
         public void remote(int ioTimeout, int lockTimeout) {
@@ -373,7 +389,7 @@ public class Vxi11Client {
         }
 
         public void local() {
-            local(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            local(ioTimeout, lockTimeout);
         }
 
         public void local(int ioTimeout, int lockTimeout) {
@@ -381,7 +397,7 @@ public class Vxi11Client {
         }
 
         public void lock() {
-            lock(DEFAULT_IO_TIMEOUT, DEFAULT_LOCK_TIMEOUT);
+            lock(ioTimeout, lockTimeout);
         }
 
         public void lock(int ioTimeout, int lockTimeout) {
@@ -436,7 +452,7 @@ public class Vxi11Client {
 
         protected void genericRpc(int options, int ioTimeout, int lockTimeout) {
             DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
-            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, DEFAULT_IO_TIMEOUT), Math.max(lockTimeout, DEFAULT_LOCK_TIMEOUT), deviceFlags);
+            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
             DeviceError response = new DeviceError();
             call(coreChannel, options, request, response);
             response.getError().checkErrorThrowException();
