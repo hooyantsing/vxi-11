@@ -1,11 +1,9 @@
 package xyz.hooy.vxi11.rpc;
 
-import org.acplt.oncrpc.*;
+import xyz.hooy.vxi11.rpc.idl.Device_ReadResp;
 import xyz.hooy.vxi11.util.BitUtils;
 
-import java.io.IOException;
-
-public class DeviceReadResponse implements XdrAble {
+public class DeviceReadResponse {
 
     public final static int END_OFFSET = 2;
 
@@ -13,48 +11,33 @@ public class DeviceReadResponse implements XdrAble {
 
     public final static int REQUESTED_COUNT_OFFSET = 0;
 
-    private DeviceErrorCode error;
-    private int reason;
-    private byte[] data;
+    private final DeviceError error;
+    private final int reason;
+    private final byte[] data;
 
-    public DeviceReadResponse() {
-    }
-
-    protected DeviceReadResponse(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        xdrDecode(xdr);
-    }
-
-    @Override
-    public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        error.xdrEncode(xdr);
-        xdr.xdrEncodeInt(reason);
-        xdr.xdrEncodeDynamicOpaque(data);
-    }
-
-    @Override
-    public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        error = new DeviceErrorCode(xdr);
-        reason = xdr.xdrDecodeInt();
-        data = xdr.xdrDecodeDynamicOpaque();
+    public DeviceReadResponse(Device_ReadResp resp) {
+        this.error = new DeviceError(resp.error);
+        this.reason = resp.reason;
+        this.data = resp.data;
     }
 
     public boolean isEnd() {
-        return BitUtils.isBit(reason,END_OFFSET);
+        return BitUtils.isBit(reason, END_OFFSET);
     }
 
     public boolean isTerminationCharacter() {
-        return BitUtils.isBit(reason,TERMINATION_CHARACTER_OFFSET);
+        return BitUtils.isBit(reason, TERMINATION_CHARACTER_OFFSET);
     }
 
     public boolean isRequestCount() {
-        return BitUtils.isBit(reason,REQUESTED_COUNT_OFFSET);
+        return BitUtils.isBit(reason, REQUESTED_COUNT_OFFSET);
     }
 
     public boolean noReason() {
         return reason == 0;
     }
 
-    public DeviceErrorCode getError() {
+    public DeviceError getError() {
         return error;
     }
 

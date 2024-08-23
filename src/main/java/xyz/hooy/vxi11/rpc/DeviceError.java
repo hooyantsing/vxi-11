@@ -1,34 +1,32 @@
 package xyz.hooy.vxi11.rpc;
 
-import org.acplt.oncrpc.OncRpcException;
-import org.acplt.oncrpc.XdrAble;
-import org.acplt.oncrpc.XdrDecodingStream;
-import org.acplt.oncrpc.XdrEncodingStream;
+import xyz.hooy.vxi11.exception.Vxi11ServerException;
+import xyz.hooy.vxi11.rpc.idl.Device_Error;
+import xyz.hooy.vxi11.rpc.idl.Device_ErrorCode;
 
-import java.io.IOException;
+public class DeviceError {
 
-public class DeviceError implements XdrAble {
+    private final int errorId;
 
-    private DeviceErrorCode error;
-
-    public DeviceError() {
+    public DeviceError(int errorCode) {
+        this.errorId = errorCode;
     }
 
-    protected DeviceError(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        xdrDecode(xdr);
+    public DeviceError(Device_ErrorCode deviceErrorCode) {
+        this(deviceErrorCode.value);
     }
 
-    @Override
-    public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        error.xdrEncode(xdr);
+    public DeviceError(Device_Error deviceError) {
+        this(deviceError.error);
     }
 
-    @Override
-    public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        error = new DeviceErrorCode(xdr);
+    public int getErrorId() {
+        return errorId;
     }
 
-    public DeviceErrorCode getError() {
-        return error;
+    public void checkErrorThrowException() {
+        if (errorId != DeviceErrorCode.NO_ERROR) {
+            throw new Vxi11ServerException(errorId);
+        }
     }
 }

@@ -1,17 +1,16 @@
 package xyz.hooy.vxi11;
 
 import org.acplt.oncrpc.*;
-import org.acplt.oncrpc.server.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.entity.ByteArrayBuffer;
-import xyz.hooy.vxi11.entity.StatusByte;
+import xyz.hooy.vxi11.entity.StatusByteEvent;
 import xyz.hooy.vxi11.entity.Vxi11ServiceRequestListener;
 import xyz.hooy.vxi11.exception.Vxi11ClientException;
 import xyz.hooy.vxi11.rpc.*;
+import xyz.hooy.vxi11.rpc.idl.*;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -38,11 +37,11 @@ public class Vxi11Client {
 
     private int lockTimeout = 0;
 
-    private OncRpcClient coreChannel;
+    private vxi11_DEVICE_CORE_Client coreChannel;
 
-    private OncRpcClient abortChannel;
+    private vxi11_DEVICE_ASYNC_Client abortChannel;
 
-    private InterruptServer interruptChannel;
+    private vxi11_DEVICE_INTR_Server interruptChannel;
 
     public Vxi11Client(InetAddress host) {
         this(host, 1180, 1181);
@@ -62,31 +61,31 @@ public class Vxi11Client {
         if (!connectedCoreChannel()) {
             openCoreChannel();
         }
-        CreateLinkParams request = new CreateLinkParams(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
-        CreateLinkResponse response = new CreateLinkResponse();
+        Create_LinkResp response;
         try {
-            call(coreChannel, Channels.Core.Options.CREATE_LINK, request, response);
-            response.getError().checkErrorThrowException();
+            Create_LinkParms request = new Create_LinkParms(clientId, lockTimeout > 0, Math.max(lockTimeout, 0), device);
+            response = coreChannel.create_link_1(request);
+            new DeviceError(response.error).checkErrorThrowException();
         } catch (Exception e) {
             emptyLinksCloseAllChannel();
-            throw e;
+            throw new Vxi11ClientException(e);
         }
         if (!connectedAbortChannel()) {
-            openAbortChannel(response.getAbortPort());
+            openAbortChannel(response.abortPort);
         }
         if (!connectedInterruptChannel()) {
             openInterruptChannel();
         }
-        Link link = new Link(response.getLink(), response.getMaxReceiveSize());
+        Link link = new Link(response.lid, response.maxRecvSize);
         links.add(link);
         return link;
     }
 
     private void openCoreChannel() {
         try {
-            this.coreChannel = OncRpcClient.newOncRpcClient(host, Channels.Core.PROGRAM, Channels.Core.VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
-            coreChannel.setTimeout(timeout);
-            coreChannel.setCharacterEncoding(charset);
+            this.coreChannel = new vxi11_DEVICE_CORE_Client(host, vxi11.DEVICE_CORE, vxi11.DEVICE_CORE_VERSION, corePort, OncRpcProtocols.ONCRPC_TCP);
+            coreChannel.getClient().setTimeout(timeout);
+            coreChannel.getClient().setCharacterEncoding(charset);
         } catch (Exception e) {
             throw new Vxi11ClientException(e);
         }
@@ -94,9 +93,9 @@ public class Vxi11Client {
 
     private void openAbortChannel(int abortPort) {
         try {
-            this.abortChannel = OncRpcClient.newOncRpcClient(host, Channels.Abort.PROGRAM, Channels.Abort.VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
-            abortChannel.setTimeout(timeout);
-            abortChannel.setCharacterEncoding(charset);
+            this.abortChannel = new vxi11_DEVICE_ASYNC_Client(host, vxi11.DEVICE_ASYNC, vxi11.DEVICE_ASYNC_VERSION, abortPort, OncRpcProtocols.ONCRPC_TCP);
+            abortChannel.getClient().setTimeout(timeout);
+            abortChannel.getClient().setCharacterEncoding(charset);
         } catch (Exception e) {
             log.warn("Failed to establish the abort channel, the instrument may not support it.");
         }
@@ -104,7 +103,7 @@ public class Vxi11Client {
 
     private void openInterruptChannel() {
         try {
-            InterruptServer interruptServer = new InterruptServer(interruptPort);
+            vxi11_DEVICE_INTR_Server interruptServer = new vxi11_DEVICE_INTR_Server(interruptPort);
             interruptChannel.setCharacterEncoding(charset);
             interruptChannel.run();
             this.interruptChannel = interruptServer;
@@ -113,13 +112,12 @@ public class Vxi11Client {
             return;
         }
         try {
-            DeviceRemoteFunction request = new DeviceRemoteFunction(addressInt(host), interruptPort, Channels.Interrupt.PROGRAM, Channels.Interrupt.PROGRAM);
-            DeviceError response = new DeviceError();
-            call(coreChannel, Channels.Core.Options.CREATE_INTERRUPT_CHANNEL, request, response);
-            response.getError().checkErrorThrowException();
+            Device_RemoteFunc request = new Device_RemoteFunc(addressInt(host), interruptPort, vxi11.DEVICE_INTR, vxi11.DEVICE_INTR_VERSION, Device_AddrFamily.DEVICE_TCP);
+            Device_Error response = coreChannel.create_intr_chan_1(request);
+            new DeviceError(response).checkErrorThrowException();
         } catch (Exception e) {
             log.warn("Failed to establish the interrupt channel, the instrument may not support it.\n {}", e.getMessage());
-            interruptChannel.close();
+            interruptChannel.stopRpcProcessing();
             interruptChannel = null;
         }
     }
@@ -149,10 +147,9 @@ public class Vxi11Client {
     private void closeInterruptChannel() {
         if (connectedInterruptChannel()) {
             try {
-                XdrVoid request = XdrVoid.XDR_VOID;
-                DeviceError response = new DeviceError();
-                call(coreChannel, Channels.Core.Options.DESTROY_INTERRUPT_CHANNEL, request, response);
-                interruptChannel.close();
+                Device_Error response = coreChannel.destroy_intr_chan_1();
+                new DeviceError(response).checkErrorThrowException();
+                interruptChannel.stopRpcProcessing();
             } catch (Exception e) {
                 log.warn("Close interrupt channel failed.", e);
             }
@@ -186,10 +183,10 @@ public class Vxi11Client {
 
     public void setTimeout(int timeout) {
         if (connectedCoreChannel()) {
-            coreChannel.setTimeout(timeout);
+            coreChannel.getClient().setTimeout(timeout);
         }
         if (connectedAbortChannel()) {
-            abortChannel.setTimeout(timeout);
+            abortChannel.getClient().setTimeout(timeout);
         }
         // InterruptChannel default timeout
         this.timeout = timeout;
@@ -217,26 +214,15 @@ public class Vxi11Client {
 
     public void setCharset(String charset) {
         if (connectedCoreChannel()) {
-            coreChannel.setCharacterEncoding(charset);
+            coreChannel.getClient().setCharacterEncoding(charset);
         }
         if (connectedAbortChannel()) {
-            abortChannel.setCharacterEncoding(charset);
+            abortChannel.getClient().setCharacterEncoding(charset);
         }
         if (connectedInterruptChannel()) {
             interruptChannel.setCharacterEncoding(charset);
         }
         this.charset = charset;
-    }
-
-    private void call(OncRpcClient channel, int procedureNumber, XdrAble params, XdrAble result) {
-        if (Objects.isNull(channel)) {
-            throw new IllegalArgumentException("No channel established, method not supported.");
-        }
-        try {
-            channel.call(procedureNumber, params, result);
-        } catch (Exception e) {
-            throw new Vxi11ClientException(e);
-        }
     }
 
     private int addressInt(InetAddress host) {
@@ -253,7 +239,7 @@ public class Vxi11Client {
 
         private final String handle = String.valueOf(hashCode());
 
-        private final DeviceLink link;
+        private final Device_Link link;
 
         private final int blockSize;
 
@@ -261,170 +247,159 @@ public class Vxi11Client {
 
         private final Set<Vxi11ServiceRequestListener> serviceRequestListeners = new HashSet<>();
 
-        protected Link(DeviceLink link, int blockSize) {
+        protected Link(Device_Link link, int blockSize) {
             this.link = link;
             this.blockSize = blockSize;
         }
 
         @Override
-        public void close() {
+        public void close() throws OncRpcException, IOException {
             if (!closed) {
-                DeviceError response = new DeviceError();
-                call(coreChannel, Channels.Core.Options.DESTROY_LINK, link, response);
-                response.getError().checkErrorThrowException();
+                Device_Error response = coreChannel.destroy_link_1(link);
+                new DeviceError(response).checkErrorThrowException();
                 links.remove(this);
                 this.closed = true;
                 emptyLinksCloseAllChannel();
             }
         }
 
-        public void write(byte[] data) {
+        public void write(byte[] data) throws OncRpcException, IOException {
             write(data, ioTimeout, lockTimeout);
         }
 
-        public void write(byte[] data, int ioTimeout, int lockTimeout) {
+        public void write(byte[] data, int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
             int writeSize = 0;
             while (writeSize < data.length) {
                 byte[] block = new byte[Math.min(data.length - writeSize, blockSize)];
                 System.arraycopy(data, writeSize, block, 0, block.length);
                 DeviceFlags deviceFlags = new DeviceFlags().enableEnd(writeSize + blockSize >= data.length).enableWaitLock(lockTimeout > 0);
-                DeviceWriteParams request = new DeviceWriteParams(link, block, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
-                DeviceWriteResponse response = new DeviceWriteResponse();
-                call(coreChannel, Channels.Core.Options.DEVICE_WRITE, request, response);
-                response.getError().checkErrorThrowException();
+                Device_WriteParms request = new Device_WriteParms(link, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags.buildDeviceFlags(), block);
+                Device_WriteResp response = coreChannel.device_write_1(request);
+                new DeviceError(response.error).checkErrorThrowException();
                 writeSize += block.length;
             }
         }
 
-        public void writeString(String data) {
+        public void writeString(String data) throws OncRpcException, IOException {
             writeString(data, ioTimeout, lockTimeout);
         }
 
-        public void writeString(String data, int ioTimeout, int lockTimeout) {
-            try {
-                write(data.getBytes(charset), ioTimeout, lockTimeout);
-            } catch (UnsupportedEncodingException e) {
-                throw new Vxi11ClientException(e);
-            }
+        public void writeString(String data, int ioTimeout, int lockTimeout) throws IOException, OncRpcException {
+            write(data.getBytes(charset), ioTimeout, lockTimeout);
         }
 
-        public byte[] read(char terminationCharacter) {
+        public byte[] read(char terminationCharacter) throws OncRpcException, IOException {
             return read(terminationCharacter, ioTimeout, lockTimeout);
         }
 
-        public byte[] read(char terminationCharacter, int ioTimeout, int lockTimeout) {
+        public byte[] read(char terminationCharacter, int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
             return read((byte) terminationCharacter, ioTimeout, lockTimeout);
         }
 
-        public byte[] read(byte terminationCharacter) {
+        public byte[] read(byte terminationCharacter) throws OncRpcException, IOException {
             return read(terminationCharacter, ioTimeout, lockTimeout);
         }
 
-        public byte[] read(byte terminationCharacter, int ioTimeout, int lockTimeout) {
-            DeviceReadResponse response;
+        public byte[] read(byte terminationCharacter, int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
+            DeviceReadResponse readResponse;
             ByteArrayBuffer buffer = new ByteArrayBuffer();
             READ_TERMINATION:
             do {
                 DeviceFlags deviceFlags = new DeviceFlags().enableTerminationCharacter(true).enableWaitLock(lockTimeout > 0);
-                DeviceReadParams request = new DeviceReadParams(link, blockSize, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), terminationCharacter, deviceFlags);
-                response = new DeviceReadResponse();
-                call(coreChannel, Channels.Core.Options.DEVICE_READ, request, response);
-                response.getError().checkErrorThrowException();
-                for (byte data : response.getData()) {
+                Device_ReadParms request = new Device_ReadParms(link, blockSize, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags.buildDeviceFlags(), terminationCharacter);
+                Device_ReadResp response = coreChannel.device_read_1(request);
+                readResponse = new DeviceReadResponse(response);
+                readResponse.getError().checkErrorThrowException();
+                for (byte data : readResponse.getData()) {
                     buffer.append(data);
                     if (data == terminationCharacter) break READ_TERMINATION;
                 }
-            } while (response.noReason());
+            } while (readResponse.noReason());
             return buffer.toByteArray();
         }
 
-        public String readString(char terminationCharacter) {
+        public String readString(char terminationCharacter) throws OncRpcException, IOException {
             return readString(terminationCharacter, ioTimeout, lockTimeout);
         }
 
-        public String readString(char terminationCharacter, int ioTimeout, int lockTimeout) {
+        public String readString(char terminationCharacter, int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
             byte[] read = read(terminationCharacter, ioTimeout, lockTimeout);
-            try {
-                return new String(read, charset);
-            } catch (UnsupportedEncodingException e) {
-                throw new Vxi11ClientException(e);
-            }
+            return new String(read, charset);
         }
 
-        public StatusByte readStatusByte() {
+        public StatusByteEvent readStatusByte() throws OncRpcException, IOException {
             return readStatusByte(ioTimeout, lockTimeout);
         }
 
-        public StatusByte readStatusByte(int ioTimeout, int lockTimeout) {
+        public StatusByteEvent readStatusByte(int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
             DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
-            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
-            DeviceReadStbResponse response = new DeviceReadStbResponse();
-            call(coreChannel, Channels.Core.Options.DEVICE_READ_STB, request, response);
-            response.getError().checkErrorThrowException();
-            return new StatusByte(response.getStb());
+            Device_GenericParms request = new Device_GenericParms(link, deviceFlags.buildDeviceFlags(), Math.max(ioTimeout, 0), Math.max(lockTimeout, 0));
+            Device_ReadStbResp response = coreChannel.device_readstb_1(request);
+            new DeviceError(response.error).checkErrorThrowException();
+            return new StatusByteEvent(response.stb);
         }
 
-        public void trigger() {
+        public void trigger() throws OncRpcException, IOException {
             trigger(ioTimeout, lockTimeout);
         }
 
-        public void trigger(int ioTimeout, int lockTimeout) {
-            genericRpc(Channels.Core.Options.DEVICE_TRIGGER, ioTimeout, lockTimeout);
+        public void trigger(int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
+            genericRpc(coreChannel::device_trigger_1, ioTimeout, lockTimeout);
         }
 
-        public void clear() {
+        public void clear() throws OncRpcException, IOException {
             clear(ioTimeout, lockTimeout);
         }
 
-        public void clear(int ioTimeout, int lockTimeout) {
-            genericRpc(Channels.Core.Options.DEVICE_CLEAR, ioTimeout, lockTimeout);
+        public void clear(int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
+            genericRpc(coreChannel::device_clear_1, ioTimeout, lockTimeout);
         }
 
-        public void remote() {
+        public void remote() throws OncRpcException, IOException {
             remote(ioTimeout, lockTimeout);
         }
 
-        public void remote(int ioTimeout, int lockTimeout) {
-            genericRpc(Channels.Core.Options.DEVICE_REMOTE, ioTimeout, lockTimeout);
+        public void remote(int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
+            genericRpc(coreChannel::device_remote_1, ioTimeout, lockTimeout);
         }
 
-        public void local() {
+        public void local() throws OncRpcException, IOException {
             local(ioTimeout, lockTimeout);
         }
 
-        public void local(int ioTimeout, int lockTimeout) {
-            genericRpc(Channels.Core.Options.DEVICE_LOCAL, ioTimeout, lockTimeout);
+        public void local(int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
+            genericRpc(coreChannel::device_local_1, ioTimeout, lockTimeout);
         }
 
-        public void lock() {
-            lock(ioTimeout, lockTimeout);
+        public void lock() throws OncRpcException, IOException {
+            lock(lockTimeout);
         }
 
-        public void lock(int ioTimeout, int lockTimeout) {
-            genericRpc(Channels.Core.Options.DEVICE_LOCK, ioTimeout, lockTimeout);
+        public void lock(int lockTimeout) throws OncRpcException, IOException {
+            DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
+            Device_LockParms request = new Device_LockParms(link, deviceFlags.buildDeviceFlags(), lockTimeout);
+            Device_Error response = coreChannel.device_lock_1(request);
+            new DeviceError(response).checkErrorThrowException();
         }
 
-        public void unlock() {
-            DeviceError response = new DeviceError();
-            call(coreChannel, Channels.Core.Options.DEVICE_UNLOCK, link, response);
-            response.getError().checkErrorThrowException();
+        public void unlock() throws OncRpcException, IOException {
+            Device_Error response = coreChannel.device_unlock_1(link);
+            new DeviceError(response).checkErrorThrowException();
         }
 
-        public void abort() {
-            DeviceError response = new DeviceError();
-            call(abortChannel, Channels.Abort.Options.DEVICE_ABORT, link, response);
-            response.getError().checkErrorThrowException();
+        public void abort() throws OncRpcException, IOException {
+            Device_Error response = abortChannel.device_abort_1(link);
+            new DeviceError(response).checkErrorThrowException();
         }
 
-        public void enableServiceRequest() {
+        public void enableServiceRequest() throws OncRpcException, IOException {
             enableServiceRequest(true);
         }
 
-        public void enableServiceRequest(boolean enable) {
-            DeviceEnableServiceRequestParams request = new DeviceEnableServiceRequestParams(link, enable, handle);
-            DeviceError response = new DeviceError();
-            call(coreChannel, Channels.Core.Options.DEVICE_ENABLE_SRQ, request, response);
-            response.getError().checkErrorThrowException();
+        public void enableServiceRequest(boolean enable) throws OncRpcException, IOException {
+            Device_EnableSrqParms request = new Device_EnableSrqParms(link, enable, handle.getBytes(charset));
+            Device_Error response = coreChannel.device_enable_srq_1(request);
+            new DeviceError(response).checkErrorThrowException();
             if (enable) {
                 interruptChannel.registerServiceRequestLinks(handle, this);
             } else {
@@ -441,9 +416,16 @@ public class Vxi11Client {
         }
 
         protected void actionListener() {
-            StatusByte statusByte = readStatusByte();
-            for (Vxi11ServiceRequestListener listener : serviceRequestListeners) {
-                listener.action(statusByte);
+            try {
+                StatusByteEvent statusByteEvent = readStatusByte();
+                for (Vxi11ServiceRequestListener listener : serviceRequestListeners) {
+                    try {
+                        listener.action(statusByteEvent);
+                    } catch (Exception e) {
+                        log.warn(e.getMessage()); // log and continue;
+                    }
+                }
+            } catch (OncRpcException | IOException ignored) {
             }
         }
 
@@ -451,54 +433,34 @@ public class Vxi11Client {
             return closed;
         }
 
-        protected void genericRpc(int options, int ioTimeout, int lockTimeout) {
+        protected void genericRpc(GenericRpcInvoker<Device_GenericParms, Device_Error> rpc, int ioTimeout, int lockTimeout) throws OncRpcException, IOException {
             DeviceFlags deviceFlags = new DeviceFlags().enableWaitLock(lockTimeout > 0);
-            DeviceGenericParams request = new DeviceGenericParams(link, Math.max(ioTimeout, 0), Math.max(lockTimeout, 0), deviceFlags);
-            DeviceError response = new DeviceError();
-            call(coreChannel, options, request, response);
-            response.getError().checkErrorThrowException();
+            Device_GenericParms request = new Device_GenericParms(link, deviceFlags.buildDeviceFlags(), Math.max(ioTimeout, 0), Math.max(lockTimeout, 0));
+            Device_Error response = rpc.invoke(request);
+            new DeviceError(response).checkErrorThrowException();
         }
     }
 
-    private static class InterruptServer extends OncRpcServerStub implements OncRpcDispatchable, AutoCloseable {
+    private static class vxi11_DEVICE_INTR_Server extends vxi11_DEVICE_INTR_ServerStub {
 
         private final Map<String, Link> serviceRequestLinks = new HashMap<>();
 
-        private static final int BUFFER_SIZE = Short.MAX_VALUE;
-
-        public InterruptServer(int port) throws OncRpcException, IOException {
-            this(null, port);
+        public vxi11_DEVICE_INTR_Server() throws OncRpcException, IOException {
         }
 
-        public InterruptServer(InetAddress bindAddr, int port) throws OncRpcException, IOException {
-            info = new OncRpcServerTransportRegistrationInfo[]{
-                    new OncRpcServerTransportRegistrationInfo(Channels.Interrupt.PROGRAM, Channels.Interrupt.VERSION)
-            };
-            transports = new OncRpcServerTransport[]{
-                    new OncRpcUdpServerTransport(this, bindAddr, port, info, BUFFER_SIZE),
-                    new OncRpcTcpServerTransport(this, bindAddr, port, info, BUFFER_SIZE)
-            };
+        public vxi11_DEVICE_INTR_Server(int port) throws OncRpcException, IOException {
+            super(port);
         }
 
-        public void dispatchOncRpcCall(OncRpcCallInformation call, int program, int version, int procedure) throws OncRpcException, IOException {
-            if (version == Channels.Interrupt.VERSION) {
-                switch (procedure) {
-                    case 0:
-                        call.retrieveCall(XdrVoid.XDR_VOID);
-                        call.reply(XdrVoid.XDR_VOID);
-                        break;
-                    case 30: {
-                        DeviceServiceRequestParams request = new DeviceServiceRequestParams();
-                        call.retrieveCall(request);
-                        interruptServiceRequest(request);
-                        call.reply(XdrVoid.XDR_VOID);
-                        break;
-                    }
-                    default:
-                        call.failProcedureUnavailable();
-                }
-            } else {
-                call.failProgramUnavailable();
+        public vxi11_DEVICE_INTR_Server(InetAddress bindAddr, int port) throws OncRpcException, IOException {
+            super(bindAddr, port);
+        }
+
+        @Override
+        public void device_intr_srq_1(Device_SrqParms arg1) {
+            Link link = serviceRequestLinks.get(new String(arg1.handle).trim());
+            if (Objects.nonNull(link)) {
+                link.actionListener();
             }
         }
 
@@ -508,18 +470,6 @@ public class Vxi11Client {
 
         public void unregisterServiceRequestLinks(String handle) {
             serviceRequestLinks.remove(handle);
-        }
-
-        private void interruptServiceRequest(DeviceServiceRequestParams request) {
-            Link link = serviceRequestLinks.get(request.getHandle());
-            if (Objects.nonNull(link)) {
-                link.actionListener();
-            }
-        }
-
-        @Override
-        public void close() {
-            stopRpcProcessing();
         }
     }
 }

@@ -4,11 +4,11 @@ import xyz.hooy.vxi11.util.BitUtils;
 
 import java.util.EventObject;
 
-public class StatusByte extends EventObject {
+public class StatusByteEvent extends EventObject {
 
     private final byte status;
 
-    public StatusByte(byte status) {
+    public StatusByteEvent(byte status) {
         super(status);
         this.status = status;
     }

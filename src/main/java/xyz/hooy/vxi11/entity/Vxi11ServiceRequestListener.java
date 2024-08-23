@@ -5,5 +5,5 @@ import java.util.EventListener;
 @FunctionalInterface
 public interface Vxi11ServiceRequestListener extends EventListener {
 
-    void action(StatusByte statusByte);
+    void action(StatusByteEvent statusByteEvent);
 }

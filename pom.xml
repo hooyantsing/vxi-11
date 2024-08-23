@@ -40,9 +40,9 @@
                 <artifactId>remotetea-maven-plugin</artifactId>
                 <version>1.1.6</version>
                 <configuration>
-                    <xFile>${project.basedir}\src\main\resources\vxi11.x</xFile>
+                    <xFile>src/main/resources/rpc/vxi11.x</xFile>
                     <destDir>${project.basedir}\src\main\java</destDir>
-                    <packageName>xyz.hooy.vxi11.idl</packageName>
+                    <packageName>xyz.hooy.vxi11.rpc.idl</packageName>
                 </configuration>
             </plugin>
         </plugins>

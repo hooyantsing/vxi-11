@@ -1,11 +1,9 @@
 package xyz.hooy.vxi11.rpc;
 
-import org.acplt.oncrpc.*;
+import xyz.hooy.vxi11.rpc.idl.Device_Flags;
 import xyz.hooy.vxi11.util.BitUtils;
 
-import java.io.IOException;
-
-public class DeviceFlags implements XdrAble {
+public class DeviceFlags {
 
     public final static int TERMINATION_CHARACTER_OFFSET = 7;
 
@@ -16,20 +14,6 @@ public class DeviceFlags implements XdrAble {
     private int flagBits = 0;
 
     public DeviceFlags() {
-    }
-
-    protected DeviceFlags(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        xdrDecode(xdr);
-    }
-
-    @Override
-    public void xdrEncode(XdrEncodingStream xdr) throws OncRpcException, IOException {
-        xdr.xdrEncodeInt(flagBits);
-    }
-
-    @Override
-    public void xdrDecode(XdrDecodingStream xdr) throws OncRpcException, IOException {
-        flagBits = xdr.xdrDecodeInt();
     }
 
     public boolean isTerminationCharacter() {
@@ -57,5 +41,9 @@ public class DeviceFlags implements XdrAble {
     public DeviceFlags enableWaitLock(boolean enable) {
         this.flagBits = BitUtils.setBit(flagBits, WAIT_LOCK_OFFSET, enable);
         return this;
+    }
+
+    public Device_Flags buildDeviceFlags() {
+        return new Device_Flags(flagBits);
     }
 }
