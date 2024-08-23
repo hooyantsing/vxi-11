@@ -1,13 +1,17 @@
 package xyz.hooy.vxi11;
 
-import org.acplt.oncrpc.*;
+import org.acplt.oncrpc.OncRpcException;
+import org.acplt.oncrpc.OncRpcProtocols;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import xyz.hooy.vxi11.entity.ByteArrayBuffer;
 import xyz.hooy.vxi11.entity.StatusByteEvent;
 import xyz.hooy.vxi11.entity.Vxi11ServiceRequestListener;
 import xyz.hooy.vxi11.exception.Vxi11ClientException;
-import xyz.hooy.vxi11.rpc.*;
+import xyz.hooy.vxi11.rpc.DeviceError;
+import xyz.hooy.vxi11.rpc.DeviceFlags;
+import xyz.hooy.vxi11.rpc.DeviceReadResponse;
+import xyz.hooy.vxi11.rpc.GenericRpcInvoker;
 import xyz.hooy.vxi11.rpc.idl.*;
 
 import java.io.IOException;
@@ -19,7 +23,7 @@ public class Vxi11Client {
 
     private final static Logger log = LoggerFactory.getLogger(Vxi11Client.class);
 
-    private final int clientId = hashCode();
+    private final int clientId = super.hashCode();
 
     private final List<Link> links = new ArrayList<>();
 
@@ -33,7 +37,7 @@ public class Vxi11Client {
 
     private int timeout = 3000;
 
-    private int ioTimeout = 0; // 0: not block
+    private int ioTimeout = 1000; // 0: not block
 
     private int lockTimeout = 0;
 
@@ -235,9 +239,41 @@ public class Vxi11Client {
         return address;
     }
 
+    private static class vxi11_DEVICE_INTR_Server extends vxi11_DEVICE_INTR_ServerStub {
+
+        private final Map<String, Link> serviceRequestLinks = new HashMap<>();
+
+        public vxi11_DEVICE_INTR_Server() throws OncRpcException, IOException {
+        }
+
+        public vxi11_DEVICE_INTR_Server(int port) throws OncRpcException, IOException {
+            super(port);
+        }
+
+        public vxi11_DEVICE_INTR_Server(InetAddress bindAddr, int port) throws OncRpcException, IOException {
+            super(bindAddr, port);
+        }
+
+        @Override
+        public void device_intr_srq_1(Device_SrqParms arg1) {
+            Link link = serviceRequestLinks.get(new String(arg1.handle, StandardCharsets.UTF_8).trim());
+            if (Objects.nonNull(link)) {
+                link.actionListener();
+            }
+        }
+
+        public void registerServiceRequestLinks(String handle, Link link) {
+            serviceRequestLinks.put(handle, link);
+        }
+
+        public void unregisterServiceRequestLinks(String handle) {
+            serviceRequestLinks.remove(handle);
+        }
+    }
+
     public class Link implements AutoCloseable {
 
-        private final String handle = String.valueOf(hashCode());
+        private final String handle = String.valueOf(super.hashCode());
 
         private final Device_Link link;
 
@@ -397,7 +433,7 @@ public class Vxi11Client {
         }
 
         public void enableServiceRequest(boolean enable) throws OncRpcException, IOException {
-            Device_EnableSrqParms request = new Device_EnableSrqParms(link, enable, handle.getBytes(charset));
+            Device_EnableSrqParms request = new Device_EnableSrqParms(link, enable, handle.getBytes(StandardCharsets.UTF_8));
             Device_Error response = coreChannel.device_enable_srq_1(request);
             new DeviceError(response).checkErrorThrowException();
             if (enable) {
@@ -438,38 +474,6 @@ public class Vxi11Client {
             Device_GenericParms request = new Device_GenericParms(link, deviceFlags.buildDeviceFlags(), Math.max(ioTimeout, 0), Math.max(lockTimeout, 0));
             Device_Error response = rpc.invoke(request);
             new DeviceError(response).checkErrorThrowException();
-        }
-    }
-
-    private static class vxi11_DEVICE_INTR_Server extends vxi11_DEVICE_INTR_ServerStub {
-
-        private final Map<String, Link> serviceRequestLinks = new HashMap<>();
-
-        public vxi11_DEVICE_INTR_Server() throws OncRpcException, IOException {
-        }
-
-        public vxi11_DEVICE_INTR_Server(int port) throws OncRpcException, IOException {
-            super(port);
-        }
-
-        public vxi11_DEVICE_INTR_Server(InetAddress bindAddr, int port) throws OncRpcException, IOException {
-            super(bindAddr, port);
-        }
-
-        @Override
-        public void device_intr_srq_1(Device_SrqParms arg1) {
-            Link link = serviceRequestLinks.get(new String(arg1.handle).trim());
-            if (Objects.nonNull(link)) {
-                link.actionListener();
-            }
-        }
-
-        public void registerServiceRequestLinks(String handle, Link link) {
-            serviceRequestLinks.put(handle, link);
-        }
-
-        public void unregisterServiceRequestLinks(String handle) {
-            serviceRequestLinks.remove(handle);
         }
     }
 }

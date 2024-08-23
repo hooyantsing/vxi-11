@@ -5,11 +5,8 @@ import org.junit.jupiter.api.Test;
 import xyz.hooy.vxi11.Vxi11Client;
 import xyz.hooy.vxi11.Vxi11VisaManager;
 
-import javax.swing.*;
-import javax.swing.table.AbstractTableModel;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 public class Vxi11Tests {
 
